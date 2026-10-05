@@ -1,0 +1,297 @@
+/* Uses the same tokens as hero.module.css (--ink, --moon, --accent, --display).
+   --about-hue now only recolours the falling-man GIF (the standing figure uses the pre-made
+   standing-blue.webp). Set --about-hue: 0deg to get that GIF back in its original red. */
+.about {
+  --hue: var(--about-hue, 225deg);
+  position: relative;
+  overflow-x: clip;
+  background: var(--ink, #04010f);
+  color: var(--moon, #eceaf5);
+}
+/* seam: fades the bottom of the hero into this section's background (sits over the hero's shader, under its text) */
+.about::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -34vh;
+  height: 34vh;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--ink, #04010f) 65%, transparent) 55%,
+    var(--ink, #04010f) 100%
+  );
+}
+.about [data-w] {
+  display: inline-block;
+}
+.script {
+  font-family: var(--font-script), cursive;
+  font-weight: 400;
+  font-variation-settings: normal;
+  font-size: 1.15em;
+}
+.tint {
+  filter: hue-rotate(var(--hue));
+}
+
+/* ---------- 1. statement ---------- */
+.statement {
+  padding: clamp(96px, 16vh, 170px) clamp(18px, 4vw, 48px) clamp(56px, 10vh, 110px);
+  /* very faint accent glow so the hero's glow carries on behind the paragraph */
+  background: radial-gradient(70% 90% at 50% 0%, color-mix(in srgb, var(--accent, #4c6fff) 9%, transparent), transparent 70%);
+}
+.statementText {
+  margin: 0 auto;
+  width: 90%;
+  max-width: none;
+  text-align: center;
+  font-family: var(--display);
+  font-variation-settings: "wdth" 78, "wght" 300;
+  font-size: clamp(1.2rem, 2.8vw, 3rem);
+  line-height: 1.08;
+  text-transform: uppercase;
+  color: var(--accent, #4c6fff);
+}
+.indent {
+  display: inline-block;
+  width: 10vw;
+}
+
+/* ---------- 2. word + lines, then the falling-man card (one pinned scene) ---------- */
+.fall {
+  position: relative;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+}
+.lines {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.lines path {
+  fill: none;
+  stroke: var(--about-line, var(--accent, #4c6fff)); /* line colour (your cobalt accent) */
+  stroke-width: var(--about-line-width, 1); /* thickness, in viewBox units (about 0.75px at 1440px wide) */
+  opacity: var(--about-line-opacity, 0.6);
+}
+.bigWord {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  color: var(--accent, #4c6fff);
+}
+.bigWord .script {
+  font-size: clamp(5rem, 17vw, 19rem);
+  line-height: 1;
+}
+.sceneCopy {
+  position: absolute;
+  z-index: 1;
+  right: clamp(28px, 5vw, 72px);
+  top: 22%;
+  margin: 0;
+  width: min(30rem, 36vw);
+  text-align: right;
+  font-family: var(--display);
+  font-variation-settings: "wdth" 78, "wght" 420;
+  font-size: clamp(0.9rem, 1.45vw, 1.45rem);
+  line-height: 1.12;
+  color: #ffffff;
+}
+.card {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  background: #000;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+.media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tear {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  will-change: transform;
+}
+.tear img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fallCopy {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding: clamp(18px, 4vw, 48px);
+  pointer-events: none;
+}
+.fallHeading {
+  margin: 0;
+  font-family: var(--display);
+  font-variation-settings: "wdth" 78, "wght" 560;
+  font-size: clamp(2.4rem, 7.2vw, 8rem);
+  line-height: 0.92;
+  letter-spacing: -0.01em;
+}
+.fallSide {
+  margin: 0;
+  max-width: 18ch;
+  text-align: right;
+  font-family: var(--display);
+  font-variation-settings: "wdth" 78, "wght" 420;
+  font-size: clamp(1.1rem, 2.2vw, 2.2rem);
+  line-height: 1.1;
+}
+.mask {
+  display: block;
+  overflow: hidden;
+  padding: 0.04em 0.1em 0.14em;
+  margin: 0 -0.1em;
+}
+.maskIn {
+  display: block;
+}
+
+/* ---------- 3. process ---------- */
+.process {
+  position: relative;
+  overflow: hidden;
+  background: #000;
+  padding: clamp(80px, 14vh, 160px) clamp(18px, 4vw, 48px) clamp(260px, 50vh, 560px);
+}
+.bg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 100%; /* covers the whole section, whatever its height is after your spacing edits */
+  z-index: 0;
+  will-change: transform;
+}
+.bg img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 100%;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14%);
+}
+.processHead,
+.processIntro,
+.steps {
+  position: relative;
+  z-index: 1;
+}
+.processHead {
+  margin: 0 0 clamp(72px, 20vh, 200px) auto; /* gap between the headline and the paragraph under it */
+  width: min(100%, 62%);
+  font-family: var(--display);
+  font-variation-settings: "wdth" 78, "wght" 300;
+  font-size: clamp(1.8rem, 4vw, 5rem);
+  line-height: 1.05;
+  color: var(--accent, #4c6fff);
+}
+.processScript {
+  display: block;
+}
+.processIntro {
+  margin-bottom: 120px;
+  width: min(100%, 30rem);
+  font-family: var(--display);
+  font-variation-settings: "wdth" 90, "wght" 430;
+  font-size: clamp(0.85rem, 1.15vw, 1.3rem);
+  line-height: 1.2;
+  text-align: left;
+  color: var(--accent, #4c6fff);
+}
+.steps {
+  list-style: none;
+  margin: clamp(80px, 16vh, 200px) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(64px, 16vh, 180px);
+}
+.step {
+  margin-top: 130px;
+  width: min(100%, 34rem);
+}
+.left {
+  align-self: flex-start;
+}
+.right {
+  align-self: flex-end;
+  text-align: right;
+}
+.stepTitle {
+  margin: 0 0 0.3em;
+  font-family: var(--font-script), cursive;
+  font-weight: 400;
+  font-size: clamp(3rem, 7vw, 8rem);
+  line-height: 1;
+  color: var(--accent, #4c6fff);
+}
+.stepBody {
+  margin: 0;
+  font-family: var(--display);
+  font-variation-settings: "wdth" 70, "wght" 390;
+  font-size: clamp(1.1rem, 1.9vw, 1.3rem);
+  line-height: 1.15;
+  opacity: 0.85;
+  color: var(--accent, #4c6fff);
+}
+
+@media (max-width: 760px) {
+  .indent {
+    width: 8vw;
+  }
+  .sceneCopy {
+    width: 70vw;
+    top: 16%;
+  }
+  .fallCopy {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 32px;
+  }
+  .fallSide {
+    align-self: flex-end;
+  }
+  .processHead,
+  .step {
+    width: 100%;
+  }
+}
+
+/* reduced motion: no pinning or drawing, so show the finished line figure with the word and sentence */
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    display: none;
+  }
+}
