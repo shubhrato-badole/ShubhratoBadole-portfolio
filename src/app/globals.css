@@ -1,0 +1,78 @@
+:root {
+  /* base surfaces */
+  --ink: #04010f;    /* page background, everywhere */
+  --card: #15161d;   /* the clearance-form card in the intro */
+  --dusk: #120c2b;   /* the assistant panel/pill surface in the hero */
+  --moon: #ECEAF5;   /* primary text / "ink" strokes, everywhere */
+  --haze: #8B87A8;   /* muted text (hero) */
+  --muted: rgba(237, 234, 225, 0.52); /* muted text (intro) */
+  --line: rgba(236, 234, 245, 0.14);
+
+  /* accent family — one blue, used everywhere; --cobalt is an alias
+     kept so the intro's original code (which calls it --cobalt)
+     doesn't need every reference rewritten */
+  --accent: #4C6FFF;
+  --cobalt: #4C6FFF;
+  --accent2: #E4DBFF; /* lighter violet, used in the hero's button gradient */
+  --tint: #93A8FF;    /* lighter accent used inside the intro */
+  --red: #FF5A46;     /* the HIRED stamp only */
+
+  /* type */
+  --serif: "Instrument Serif", "Times New Roman", Georgia, serif;
+  --display: "Anybody", "Arial Narrow", Impact, sans-serif;
+  --slim: clamp(4rem, 21vw, 23rem);
+  --ls: -0.02em;
+  --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --script: "Mrs Saint Delafield", "Brush Script MT", cursive;
+  --stamp: "Anton", "Arial Narrow", Impact, sans-serif;
+
+  box-sizing: border-box;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--moon);
+  font: 400 1rem/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+
+
+
+
+
