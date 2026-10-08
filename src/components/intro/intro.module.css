@@ -1,0 +1,477 @@
+.introRoot {
+  position: relative;
+  z-index: 100; /* stacks above the hero, which is already mounted underneath */
+}
+
+.introRoot::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.35;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .5  0 0 0 .09 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* solid cover: the hero is already mounted underneath */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: var(--ink);
+}
+
+/* cursor glow (page 1) */
+.glow {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 560px;
+  height: 560px;
+  margin: -280px 0 0 -280px;
+  border-radius: 50%;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgba(76, 111, 255, 0.24), rgba(76, 111, 255, 0.08) 45%, transparent 72%);
+  filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  will-change: transform;
+}
+.ripple {
+  position: fixed;
+  z-index: 2;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgba(160, 184, 255, 0.6), rgba(90, 120, 255, 0.28) 55%, transparent 75%);
+}
+
+/* header */
+.top {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 8;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: calc(20px + env(safe-area-inset-top, 0px)) clamp(20px, 6vw, 96px) 0;
+  font: 500 0.72rem/1 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.brand {
+  font: 400 1.4rem/1 var(--serif);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--moon);
+}
+
+/* stages */
+.stage {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  overflow: auto;
+  padding: calc(84px + env(safe-area-inset-top, 0px)) clamp(20px, 6vw, 96px) calc(64px + env(safe-area-inset-bottom, 0px));
+}
+.inner {
+  margin: auto 0;
+  width: min(1240px, 100%);
+}
+.s2 .inner {
+  margin: auto;
+  display: flex;
+  justify-content: center;
+}
+.s1 .inner {
+  margin: auto;
+  max-width: 520px;
+  text-align: center;
+}
+
+/* page 1: small, centered */
+.q {
+  margin: 0;
+  font: 400 clamp(1.9rem, 4.8vw, 3.4rem) / 1.2 var(--serif);
+  letter-spacing: -0.015em;
+}
+.mk {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  padding: 0.04em 0.06em 0.12em 0;
+}
+.mk > span {
+  display: inline-block;
+  transform: translateY(112%);
+}
+.q em {
+  font-style: italic;
+  letter-spacing: -0.01em;
+}
+.who {
+  margin: clamp(22px, 5vh, 42px) auto 0;
+  max-width: 380px;
+  opacity: 0;
+}
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.inrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.name {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  padding: 0.1em 0;
+  color: var(--moon);
+  caret-color: var(--cobalt);
+  text-align: center;
+  font: italic 400 clamp(1.3rem, 3vw, 1.7rem) / 1.25 var(--serif);
+  letter-spacing: -0.005em;
+}
+.name::placeholder {
+  color: rgba(237, 234, 225, 0.32);
+}
+.uline {
+  display: block;
+  width: 100%;
+  height: 10px;
+  overflow: visible;
+  margin-top: 2px;
+}
+.uline path {
+  fill: none;
+  stroke: var(--moon);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke 0.3s;
+}
+.who:focus-within .uline path {
+  stroke: var(--cobalt);
+}
+.go {
+  flex: none;
+  width: clamp(38px, 5.5vw, 46px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: transparent;
+  color: var(--moon);
+  display: grid;
+  place-items: center;
+  transition: background 0.3s, color 0.3s, border-color 0.3s, transform 0.3s;
+}
+.go svg {
+  width: 38%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.3s;
+}
+.who.has .go {
+  background: var(--cobalt);
+  border-color: var(--cobalt);
+  color: #fff;
+}
+.go:hover {
+  transform: scale(1.06);
+}
+.go:hover svg {
+  transform: translateX(3px);
+}
+.hint {
+  min-height: 1.4em;
+  margin: 12px 0 0;
+  font: 500 0.7rem/1.4 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: center;
+}
+.tip {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  z-index: 8;
+  transform: translateX(-50%);
+  opacity: 0;
+  white-space: nowrap;
+  font: 500 0.72rem/1 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* page 2: the form */
+.sheet {
+  position: relative;
+  width: min(640px, 100%);
+  margin: auto;
+  opacity: 0;
+  transform-origin: 50% 100%;
+  padding: clamp(22px, 3.6vh, 38px) clamp(22px, 4vw, 40px) clamp(22px, 3.4vh, 34px) clamp(36px, 5.2vw, 58px);
+  background: var(--card);
+  border-radius: 6px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05), 0 45px 90px -30px rgba(0, 0, 0, 0.75), 0 0 90px -18px rgba(76, 111, 255, 0.28);
+}
+.sheet::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.4;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='.04 .9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23f)'/></svg>");
+}
+.holes {
+  position: absolute;
+  left: 14px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  padding: 44px 0;
+}
+.holes i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: inset 0 1px 2px rgba(14, 13, 11, 0.4);
+}
+.shHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+.corp {
+  margin: 0 0 4px;
+  font: 500 0.68rem/1 var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.shHead h2 {
+  margin: 0;
+  font: 400 clamp(1.9rem, 4.6vw, 2.6rem) / 1 var(--serif);
+  letter-spacing: -0.01em;
+}
+.shHead h2 em {
+  font-style: italic;
+}
+.ring {
+  position: relative;
+  flex: none;
+  width: 46px;
+  height: 46px;
+}
+.ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.ring circle {
+  fill: none;
+  stroke-width: 3;
+}
+.rb {
+  stroke: var(--line);
+}
+.rf {
+  stroke: var(--cobalt);
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  transition: stroke-dashoffset 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.ring span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 500 0.62rem/1 var(--mono);
+  color: var(--moon);
+}
+.meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 8px 0;
+  border-top: 1.5px solid var(--moon);
+  border-bottom: 1px solid var(--line);
+  font: 500 0.66rem/1 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.field {
+  margin-top: clamp(12px, 2.2vh, 22px);
+}
+.lab {
+  margin: 0 0 4px;
+  font: 500 0.68rem/1 var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sigWrap {
+  position: relative;
+  min-height: 1.1em;
+}
+.sig {
+  display: inline-block;
+  padding: 0.05em 0.3em 0.05em 0;
+  font: 400 84px/1 var(--script);
+  color: var(--moon);
+  white-space: nowrap;
+  clip-path: inset(0 100% 0 0);
+}
+.pen {
+  position: absolute;
+  left: 0;
+  top: 55%;
+  width: 9px;
+  height: 9px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--cobalt);
+  box-shadow: 0 0 0 5px rgba(76, 111, 255, 0.35);
+  opacity: 0;
+}
+.sigRule {
+  height: 1px;
+  background: var(--moon);
+  opacity: 0.8;
+}
+.rows {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+}
+.rows li {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 12px;
+  padding: clamp(7px, 1.3vh, 11px) 0;
+  border-bottom: 1px dashed var(--line);
+}
+.cb {
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  overflow: visible;
+}
+.cb rect {
+  fill: none;
+  stroke: var(--moon);
+  stroke-width: 1.5;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.cb path {
+  fill: none;
+  stroke: var(--cobalt);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.rt {
+  font: 400 clamp(0.95rem, 2.2vw, 1.05rem) / 1.45 var(--sans);
+  opacity: 0;
+  transform: translateY(10px);
+}
+.rt .mark {
+  color: var(--tint);
+  font-weight: 500;
+}
+.verdict {
+  position: relative;
+  margin-top: clamp(14px, 2.4vh, 24px);
+  padding-top: 14px;
+  border-top: 1.5px solid var(--moon);
+  min-height: clamp(108px, 15vh, 132px);
+}
+.vtext {
+  margin: 0;
+  max-width: 13em;
+  font: italic 400 clamp(1.3rem, 3.2vw, 1.7rem) / 1.2 var(--serif);
+  clip-path: inset(0 100% 0 0);
+}
+.stamp {
+  position: absolute;
+  right: -8px;
+  bottom: -6px;
+  width: min(250px, 48%);
+  opacity: 0;
+  transform: rotate(-9deg);
+  pointer-events: none;
+  filter: drop-shadow(0 0 24px rgba(255, 90, 70, 0.4));
+}
+.stamp svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.dot {
+  position: fixed;
+  z-index: 30;
+  border-radius: 50%;
+  background: var(--red);
+  pointer-events: none;
+}
+
+/* the opening ring canvas (created on <body> by createRing in Intro.tsx) */
+.ring {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+@media (max-width: 560px) {
+  .shHead h2 {
+    font-size: 1.8rem;
+  }
+  .stamp {
+    width: 54%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rf,
+  .go,
+  .go svg {
+    transition: none;
+  }
+}
