@@ -1,0 +1,622 @@
+/* Assistant: corner launcher + full-screen takeover.
+   Every colour comes from the --h-* variables, which are generated from
+   HERO_THEME in theme.ts. Edit the theme, not this file, to change the look. */
+
+@property --ang {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- corner launcher ---------- */
+.launcher {
+  --size: 64px;
+  position: fixed;
+  right: calc(clamp(16px, 2.4vw, 32px) + env(safe-area-inset-right, 0px));
+  bottom: calc(clamp(16px, 2.4vw, 32px) + env(safe-area-inset-bottom, 0px));
+  z-index: 70;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  opacity: 0;
+  transform: translateY(14px) scale(0.9);
+  pointer-events: none;
+  transition: opacity 0.7s ease, transform 0.9s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+.launcherOn {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.orbBtn {
+  position: relative;
+  flex: none;
+  width: var(--size);
+  height: var(--size);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 10px 34px var(--h-glow), 0 2px 8px rgba(0, 0, 0, 0.5);
+  transition: transform 0.45s cubic-bezier(0.2, 0.9, 0.2, 1), box-shadow 0.45s ease;
+}
+.orbBtn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 12px 46px var(--h-glow), 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+.orbBtn:active {
+  transform: scale(0.96);
+}
+.launcherCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.bubble {
+  position: relative;
+  margin: 0 0 8px;
+  max-width: min(300px, calc(100vw - var(--size) - 64px));
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 20px 20px 6px 20px;
+  background: linear-gradient(120deg, var(--h-accent), color-mix(in srgb, var(--h-accent) 70%, var(--h-orb-secondary)));
+  color: #fff;
+  font: 500 0.72rem/1.5 var(--mono, ui-monospace, monospace);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 14px 40px var(--h-glow);
+  transform-origin: 100% 100%;
+  animation: bubbleIn 0.6s cubic-bezier(0.2, 1.2, 0.3, 1) both;
+}
+.typedWrap {
+  display: grid;
+}
+.ghost,
+.typed {
+  grid-area: 1 / 1;
+}
+.ghost {
+  visibility: hidden;
+}
+@keyframes bubbleIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- takeover ---------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
+  color: var(--h-text);
+  background:
+    radial-gradient(55% 70% at 74% 50%, var(--h-glow), transparent 72%),
+    radial-gradient(50% 55% at 8% 100%, color-mix(in srgb, var(--h-accent) 10%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--h-bg2), var(--h-bg) 60%);
+}
+.overlay[data-open="true"] {
+  visibility: visible;
+  pointer-events: auto;
+}
+/* the glow behind the orb breathes with the assistant's state */
+.overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(40% 55% at 74% 50%, var(--h-glow), transparent 70%);
+  opacity: 0.25;
+  transition: opacity 1.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.overlay[data-phase="speaking"]::before,
+.overlay[data-phase="synthesizing"]::before,
+.overlay[data-phase="thinking"]::before {
+  opacity: 0.7;
+}
+.overlay[data-phase="sleeping"]::before {
+  opacity: 0;
+}
+
+.stage {
+  position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  padding: clamp(24px, 4vw, 64px);
+  padding-top: clamp(84px, 9vh, 110px);
+  gap: clamp(16px, 3vw, 56px);
+}
+
+.topBtns {
+  position: absolute;
+  top: calc(clamp(18px, 2.6vw, 34px) + env(safe-area-inset-top, 0px));
+  right: clamp(18px, 3vw, 44px);
+  z-index: 3;
+  display: flex;
+  gap: 10px;
+}
+.iconBtn {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--h-border);
+  background: color-mix(in srgb, var(--h-surface) 70%, transparent);
+  backdrop-filter: blur(10px);
+  color: var(--h-text);
+  cursor: pointer;
+  transition: background 0.35s ease, border-color 0.35s ease, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), color 0.35s ease;
+}
+.iconBtn:hover {
+  background: color-mix(in srgb, var(--h-text) 12%, transparent);
+  border-color: color-mix(in srgb, var(--h-text) 28%, transparent);
+}
+.iconBtn[aria-pressed="true"] {
+  color: var(--h-bg);
+  background: var(--h-accent-soft);
+  border-color: transparent;
+}
+.closeBtn:hover {
+  background: var(--h-danger);
+  border-color: transparent;
+  color: #fff;
+  transform: rotate(90deg);
+}
+
+/* chat column: the input stays put, the thread grows upward */
+.chat {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 18px;
+  width: min(100%, 34rem);
+  height: min(100%, 62vh, 36rem);
+  min-height: 0;
+  justify-self: start;
+}
+.thread {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 26px, #000 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 26px, #000 100%);
+  scroll-behavior: smooth;
+}
+.thread::-webkit-scrollbar {
+  display: none;
+}
+.threadInner {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 100%;
+  gap: 16px;
+  padding-top: 26px;
+}
+
+/* messages ease in: opacity + rise + a touch of blur */
+.msgBot,
+.msgUser {
+  animation: rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+.msgBot p {
+  display: inline-block;
+  margin: 0;
+  padding: 0.8rem 1.15rem;
+  border: 1px solid var(--h-border);
+  border-radius: 20px 20px 20px 6px;
+  background: color-mix(in srgb, var(--h-surface) 82%, transparent);
+  backdrop-filter: blur(12px);
+  font: 400 clamp(0.92rem, 1.05vw, 1rem) / 1.55 var(--sans, system-ui, sans-serif);
+  color: var(--h-text);
+  max-width: 100%;
+  box-shadow: 0 10px 40px color-mix(in srgb, var(--h-bg) 70%, transparent);
+}
+.caret {
+  display: inline-block;
+  width: 0.5ch;
+  height: 1.05em;
+  margin-left: 3px;
+  vertical-align: -0.17em;
+  border-radius: 2px;
+  background: var(--h-accent-soft);
+  animation: blink 0.9s steps(2) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+.msgUser {
+  align-self: flex-end;
+  max-width: 82%;
+  margin: 0;
+  padding: 0.6rem 1.15rem;
+  border-radius: 20px 20px 6px 20px;
+  background: linear-gradient(120deg, var(--h-accent), color-mix(in srgb, var(--h-accent) 62%, var(--h-orb-secondary)));
+  color: #fff;
+  font: 500 0.92rem/1.4 var(--sans, system-ui, sans-serif);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--h-accent) 28%, transparent);
+  transform-origin: 100% 100%;
+}
+.thinking {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0.65rem 1.1rem;
+  border: 1px solid var(--h-border);
+  border-radius: 20px 20px 20px 6px;
+  background: color-mix(in srgb, var(--h-surface) 82%, transparent);
+  color: var(--h-muted);
+  font: italic 400 0.92rem/1 var(--sans, system-ui, sans-serif);
+  animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.thinking em {
+  margin-right: 2px;
+}
+.thinking i {
+  width: 4px;
+  height: 4px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: dot 1.1s ease-in-out infinite;
+}
+.thinking i:nth-of-type(2) {
+  animation-delay: 0.16s;
+}
+.thinking i:nth-of-type(3) {
+  animation-delay: 0.32s;
+}
+@keyframes dot {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+.extras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  animation: rise 0.8s 0.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.actionBtn,
+.linkPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  font: 500 0.8rem/1.2 var(--sans, system-ui, sans-serif);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.35s ease, border-color 0.35s ease, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.45s ease;
+}
+.actionBtn {
+  border: 0;
+  background: var(--h-text);
+  color: var(--h-bg);
+}
+.actionBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 26px var(--h-glow);
+}
+.linkPill {
+  border: 1px solid var(--h-border);
+  background: color-mix(in srgb, var(--h-text) 5%, transparent);
+  color: var(--h-text);
+}
+.linkPill:hover {
+  border-color: var(--h-accent-soft);
+  background: color-mix(in srgb, var(--h-accent) 14%, transparent);
+  transform: translateY(-2px);
+}
+
+/* chips: dark glass, hairline border, soft lift + glow on hover */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  padding: 0.5rem 0.95rem;
+  border: 1px solid var(--h-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--h-surface) 78%, transparent);
+  backdrop-filter: blur(10px);
+  color: var(--h-text);
+  font: 500 0.82rem/1.2 var(--sans, system-ui, sans-serif);
+  cursor: pointer;
+  transition: background 0.4s ease, border-color 0.4s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.5s ease;
+  animation: rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.chip:nth-child(2) {
+  animation-delay: 0.06s;
+}
+.chip:nth-child(3) {
+  animation-delay: 0.12s;
+}
+.chip:nth-child(4) {
+  animation-delay: 0.18s;
+}
+.chip:nth-child(5) {
+  animation-delay: 0.24s;
+}
+.chip:hover {
+  border-color: color-mix(in srgb, var(--h-accent-soft) 55%, transparent);
+  background: color-mix(in srgb, var(--h-accent) 13%, var(--h-surface));
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--h-accent) 24%, transparent);
+}
+.chip:active {
+  transform: translateY(0);
+}
+
+/* input: stays light so it reads as the one bright, floating control */
+.inputWrap {
+  position: relative;
+  margin-top: 4px;
+}
+.pill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 56px;
+  padding: 0 7px 0 12px;
+  border-radius: 999px;
+  background: var(--h-input-bg);
+  color: var(--h-input-text);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5), 0 14px 56px color-mix(in srgb, var(--h-accent) 34%, transparent), 0 0 90px color-mix(in srgb, var(--h-accent) 18%, transparent);
+  transition: box-shadow 0.6s cubic-bezier(0.22, 1, 0.36, 1), transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pill:focus-within {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7), 0 18px 70px color-mix(in srgb, var(--h-accent) 46%, transparent), 0 0 110px color-mix(in srgb, var(--h-accent) 26%, transparent);
+}
+.pill::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  z-index: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(from var(--ang), transparent 0 62%, var(--h-accent) 82%, var(--h-accent-soft) 92%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0.5;
+  animation: spin 6s linear infinite;
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+.pill:focus-within::before,
+.pillLive::before {
+  opacity: 1;
+  animation-duration: 2.8s;
+}
+@keyframes spin {
+  to {
+    --ang: 360deg;
+  }
+}
+.pill > * {
+  position: relative;
+  z-index: 1;
+}
+.field {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--h-input-text);
+  font: 400 0.98rem/1 var(--sans, system-ui, sans-serif);
+}
+.field::placeholder {
+  color: color-mix(in srgb, var(--h-input-text) 45%, #fff);
+}
+.mic {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--h-input-text);
+  cursor: pointer;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+.mic:hover {
+  background: color-mix(in srgb, var(--h-accent) 12%, transparent);
+}
+.micOn {
+  color: #fff;
+  background: var(--h-accent);
+  animation: ring 1.4s ease-out infinite;
+}
+@keyframes ring {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--h-accent) 55%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 16px transparent;
+  }
+}
+.send,
+.stop {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease;
+}
+.send {
+  background: var(--h-accent);
+  color: #fff;
+}
+.send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.send:not(:disabled):hover {
+  transform: scale(1.07);
+}
+.stop {
+  background: color-mix(in srgb, var(--h-danger) 14%, transparent);
+}
+.stop span {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--h-danger);
+}
+.note {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--h-muted);
+  font: 400 0.8rem/1.3 var(--sans, system-ui, sans-serif);
+}
+
+/* ---------- the orb ----------
+   .orbWrap is exactly the VISIBLE orb's diameter (set in theme.ts as --orb-d-*).
+   The canvas is ~1.6x larger and centred, so the aura/bloom/ripples have room. */
+.orbCell {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+.orbWrap {
+  position: relative;
+  width: var(--orb-d-desktop);
+  aspect-ratio: 1;
+  will-change: transform;
+}
+.orbCanvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 159.7%; /* ORB_FILL / SCREEN_CORE in the shader */
+  height: 159.7%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.orbFallback {
+  display: none;
+}
+.orbWrap:has(.orbFallback) {
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--h-accent-soft), var(--h-accent) 45%, var(--h-bg2) 80%);
+  box-shadow: 0 0 120px var(--h-glow);
+}
+
+/* ---------- small screens ---------- */
+@media (max-width: 860px) {
+  .launcher {
+    --size: 56px;
+  }
+  .stage {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    align-items: stretch;
+    padding-top: 76px;
+    gap: 8px;
+  }
+  .orbCell {
+    grid-row: 1;
+    min-height: calc(var(--orb-d-mobile) * 1.12);
+  }
+  .orbWrap {
+    width: var(--orb-d-mobile);
+  }
+  .chat {
+    grid-row: 2;
+    width: 100%;
+    height: 100%;
+    justify-content: flex-end;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .msgBot p {
+    font-size: 0.95rem;
+  }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble,
+  .chip,
+  .msgBot,
+  .msgUser,
+  .extras,
+  .thinking,
+  .pill::before,
+  .caret,
+  .thinking i,
+  .micOn {
+    animation: none;
+  }
+  .launcher,
+  .orbBtn,
+  .overlay::before {
+    transition: none;
+  }
+}
