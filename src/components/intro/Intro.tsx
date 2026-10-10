@@ -223,6 +223,486 @@ function createRing(cover: [number, number, number], noise: HTMLImageElement | n
   }
 }
 
+
+/* ------------------------------------------------------------------------------------------
+   THE CURSOR SMOKE
+   This is the contact scene's own fluid simulation (its loading screen leaves a fading smoke
+   trail where the mouse moves): the same shaders, the same settings, the same 60 Hz step order
+   and the same way a mouse move becomes a push of smoke. It runs here on plain WebGL, so no
+   extra library is needed. Without WebGL 2 the smoke is simply skipped.
+   ------------------------------------------------------------------------------------------ */
+/* the scene's smoke colour as it sets it up: #352d3d, blend 1.5 (its own override of the defaults).
+   The scene turns the colour into linear light (like Three.js does) and encodes it back for the screen. */
+const srgbToLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+const SMOKE = {
+  BLEND: 1.5,
+  INTENSITY: 2,
+  FORCE: 1.1,
+  CURL: 1.9,
+  RADIUS: 0.4,
+  SWIRL: 2, // pressure passes
+  PRESSURE: 0.8,
+  DENSITY_DISSIPATION: 0.96,
+  VELOCITY_DISSIPATION: 1,
+  COLOR: [srgbToLinear(0x35 / 255), srgbToLinear(0x2d / 255), srgbToLinear(0x3d / 255)] as [number, number, number], // #352d3d
+  STEP: 1 / 60,
+  MAX_SPLATS: 8,
+  IDLE_FRAMES: 120,
+};
+
+const SMOKE_VERT = `attribute vec2 aPos;
+varying vec2 vUv;
+varying vec2 vL;
+varying vec2 vR;
+varying vec2 vT;
+varying vec2 vB;
+uniform vec2 texelSize;
+void main() {
+  vUv = aPos * 0.5 + 0.5;
+  vL = vUv - vec2(texelSize.x, 0.0);
+  vR = vUv + vec2(texelSize.x, 0.0);
+  vT = vUv + vec2(0.0, texelSize.y);
+  vB = vUv - vec2(0.0, texelSize.y);
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}`;
+
+const SMOKE_CLEAR = `precision highp float;
+varying vec2 vUv;
+uniform sampler2D uTexture;
+uniform float uClearValue;
+void main() { gl_FragColor = uClearValue * texture2D(uTexture, vUv); }`;
+
+const SMOKE_CURL = `precision highp float;
+varying vec2 vL;
+varying vec2 vR;
+varying vec2 vT;
+varying vec2 vB;
+uniform sampler2D uVelocity;
+void main() {
+  float L = texture2D(uVelocity, vL).y;
+  float R = texture2D(uVelocity, vR).y;
+  float T = texture2D(uVelocity, vT).x;
+  float B = texture2D(uVelocity, vB).x;
+  float vorticity = R - L - T + B;
+  gl_FragColor = vec4(vorticity, 0.0, 0.0, 1.0);
+}`;
+
+const SMOKE_DIVERGENCE = `precision highp float;
+varying highp vec2 vUv;
+varying highp vec2 vL;
+varying highp vec2 vR;
+varying highp vec2 vT;
+varying highp vec2 vB;
+uniform sampler2D uVelocity;
+void main() {
+  float L = texture2D(uVelocity, vL).x;
+  float R = texture2D(uVelocity, vR).x;
+  float T = texture2D(uVelocity, vT).y;
+  float B = texture2D(uVelocity, vB).y;
+  vec2 C = texture2D(uVelocity, vUv).xy;
+  if (vL.x < 0.0) { L = -C.x; }
+  if (vR.x > 1.0) { R = -C.x; }
+  if (vT.y > 1.0) { T = -C.y; }
+  if (vB.y < 0.0) { B = -C.y; }
+  float div = 0.5 * (R - L + T - B);
+  gl_FragColor = vec4(div, 0.0, 0.0, 1.0);
+}`;
+
+const SMOKE_GRADIENT = `precision highp float;
+varying highp vec2 vUv;
+varying highp vec2 vL;
+varying highp vec2 vR;
+varying highp vec2 vT;
+varying highp vec2 vB;
+uniform sampler2D uPressure;
+uniform sampler2D uVelocity;
+void main() {
+  float L = texture2D(uPressure, vL).x;
+  float R = texture2D(uPressure, vR).x;
+  float T = texture2D(uPressure, vT).x;
+  float B = texture2D(uPressure, vB).x;
+  vec2 velocity = texture2D(uVelocity, vUv).xy;
+  velocity.xy -= vec2(R - L, T - B);
+  gl_FragColor = vec4(velocity, 0.0, 1.0);
+}`;
+
+const SMOKE_PRESSURE = `precision highp float;
+varying highp vec2 vUv;
+varying highp vec2 vL;
+varying highp vec2 vR;
+varying highp vec2 vT;
+varying highp vec2 vB;
+uniform sampler2D uPressure;
+uniform sampler2D uDivergence;
+void main() {
+  float L = texture2D(uPressure, vL).x;
+  float R = texture2D(uPressure, vR).x;
+  float T = texture2D(uPressure, vT).x;
+  float B = texture2D(uPressure, vB).x;
+  float C = texture2D(uPressure, vUv).x;
+  float divergence = texture2D(uDivergence, vUv).x;
+  float pressure = (L + R + B + T - divergence) * 0.25;
+  gl_FragColor = vec4(pressure, 0.0, 0.0, 1.0);
+}`;
+
+const SMOKE_SPLAT = `precision highp float;
+varying vec2 vUv;
+uniform sampler2D uTarget;
+uniform float aspectRatio;
+uniform vec3 uColor;
+uniform vec2 uPointer;
+uniform float uRadius;
+void main() {
+  vec2 p = vUv - uPointer.xy;
+  p.x *= aspectRatio;
+  vec3 splat = exp(-dot(p, p) / uRadius) * uColor;
+  vec3 base = texture2D(uTarget, vUv).xyz;
+  gl_FragColor = vec4(base + splat, 1.0);
+}`;
+
+const SMOKE_ADVECTION = `precision highp float;
+varying vec2 vUv;
+uniform sampler2D uVelocity;
+uniform sampler2D uSource;
+uniform vec2 texelSize;
+uniform float dt;
+uniform float uDissipation;
+void main() {
+  vec2 coord = vUv - dt * texture2D(uVelocity, vUv).xy * texelSize;
+  gl_FragColor = uDissipation * texture2D(uSource, coord);
+  gl_FragColor.a = 1.0;
+}`;
+
+const SMOKE_VORTICITY = `precision highp float;
+varying vec2 vUv;
+varying vec2 vL;
+varying vec2 vR;
+varying vec2 vT;
+varying vec2 vB;
+uniform sampler2D uVelocity;
+uniform sampler2D uCurl;
+uniform float uCurlValue;
+uniform float dt;
+void main() {
+  float L = texture2D(uCurl, vL).x;
+  float R = texture2D(uCurl, vR).x;
+  float T = texture2D(uCurl, vT).x;
+  float B = texture2D(uCurl, vB).x;
+  float C = texture2D(uCurl, vUv).x;
+  vec2 force = vec2(abs(T) - abs(B), abs(R) - abs(L)) * 0.5;
+  force /= length(force) + 1.;
+  force *= uCurlValue * C;
+  force.y *= -1.;
+  vec2 vel = texture2D(uVelocity, vUv).xy;
+  gl_FragColor = vec4(vel + force * dt, 0.0, 1.0);
+}`;
+
+/* how the scene draws the smoke over a transparent page: its colour, as bright as the smoke is thick */
+const SMOKE_DISPLAY = `precision highp float;
+varying vec2 vUv;
+uniform sampler2D tFluid;
+uniform vec3 uColor;
+uniform float uBlend;
+uniform float uIntensity;
+void main() {
+  vec3 fluidColor = texture2D(tFluid, vUv).rgb;
+  float fluidLen = length(fluidColor);
+  float presence = min(fluidLen, 1.0);
+  vec3 colorForFluidEffect = uColor * fluidLen;
+  vec3 rgb = colorForFluidEffect * (uBlend * 0.01 * presence);
+  rgb += colorForFluidEffect * (fluidLen * uIntensity * 0.0001);
+  /* linear light -> screen colours (sRGB), as the scene's final pass does */
+  vec3 low = rgb * 12.92;
+  vec3 high = 1.055 * pow(max(rgb, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+  rgb = mix(low, high, step(vec3(0.0031308), rgb));
+  rgb = clamp(rgb, 0.0, 1.0);
+  gl_FragColor = vec4(rgb, max(rgb.r, max(rgb.g, rgb.b)));
+}`;
+
+type Smoke = { destroy: () => void };
+type SmokeTarget = { tex: WebGLTexture; fbo: WebGLFramebuffer; w: number; h: number };
+type SmokeSplat = { x: number; y: number; vx: number; vy: number };
+
+/** Creates the smoke canvas inside `parent`. Returns null if WebGL 2 is not available. */
+function createSmoke(parent: HTMLElement): Smoke | null {
+  try {
+    const touch = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    const DYE = touch ? 128 : 256;
+    const SIM = touch ? 64 : 96;
+    const canvas = document.createElement('canvas');
+    canvas.className = styles.smoke;
+    canvas.setAttribute('aria-hidden', 'true');
+    const fit = () => {
+      canvas.width = Math.max(2, Math.round(window.innerWidth * 0.5)); // the smoke is soft: half resolution is plenty
+      canvas.height = Math.max(2, Math.round(window.innerHeight * 0.5));
+    };
+    fit();
+    const gl = canvas.getContext('webgl2', {
+      alpha: true,
+      premultipliedAlpha: true,
+      antialias: false,
+      depth: false,
+      stencil: false,
+    });
+    if (!gl) return null;
+    gl.getExtension('EXT_color_buffer_float');
+    gl.getExtension('EXT_color_buffer_half_float');
+
+    const compile = (type: number, code: string) => {
+      const s = gl.createShader(type)!;
+      gl.shaderSource(s, code);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'shader');
+      return s;
+    };
+    const vert = compile(gl.VERTEX_SHADER, SMOKE_VERT);
+    const program = (frag: string) => {
+      const p = gl.createProgram()!;
+      gl.attachShader(p, vert);
+      gl.attachShader(p, compile(gl.FRAGMENT_SHADER, frag));
+      gl.bindAttribLocation(p, 0, 'aPos');
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('link');
+      const cache: Record<string, WebGLUniformLocation | null> = {};
+      return {
+        p,
+        u: (n: string) => (n in cache ? cache[n] : (cache[n] = gl.getUniformLocation(p, n))),
+      };
+    };
+    type Prog = ReturnType<typeof program>;
+    const P = {
+      splat: program(SMOKE_SPLAT),
+      curl: program(SMOKE_CURL),
+      clear: program(SMOKE_CLEAR),
+      divergence: program(SMOKE_DIVERGENCE),
+      pressure: program(SMOKE_PRESSURE),
+      gradient: program(SMOKE_GRADIENT),
+      advection: program(SMOKE_ADVECTION),
+      vorticity: program(SMOKE_VORTICITY),
+      display: program(SMOKE_DISPLAY),
+    };
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.disable(gl.BLEND);
+
+    const target = (w: number, h: number, minFilter: number): SmokeTarget => {
+      const tex = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+      const fbo = gl.createFramebuffer()!;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error('float targets unsupported');
+      gl.viewport(0, 0, w, h);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      return { tex, fbo, w, h };
+    };
+    const pair = (w: number, h: number, minFilter: number) => {
+      let a = target(w, h, minFilter);
+      let b = target(w, h, minFilter);
+      return {
+        get read() {
+          return a;
+        },
+        get write() {
+          return b;
+        },
+        swap() {
+          const t = a;
+          a = b;
+          b = t;
+        },
+      };
+    };
+    const dye = pair(DYE, DYE, gl.LINEAR);
+    const velocity = pair(SIM, SIM, gl.LINEAR);
+    const pressure = pair(SIM, SIM, gl.NEAREST);
+    const divergence = target(SIM, SIM, gl.NEAREST);
+    const curl = target(SIM, SIM, gl.NEAREST);
+
+    let aspect = window.innerWidth / window.innerHeight;
+    const activate = (pr: Prog) => {
+      gl.useProgram(pr.p);
+      gl.uniform2f(pr.u('texelSize'), 1 / (SIM * aspect), 1 / SIM);
+    };
+    const bind = (pr: Prog, name: string, unit: number, t: WebGLTexture) => {
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.uniform1i(pr.u(name), unit);
+    };
+    const draw = (t: SmokeTarget | null) => {
+      if (t) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo);
+        gl.viewport(0, 0, t.w, t.h);
+      } else {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, canvas.width, canvas.height);
+      }
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    };
+
+    /* a mouse move becomes a push of smoke (same rule as the scene) */
+    const splats: SmokeSplat[] = [];
+    let lx = 0;
+    let ly = 0;
+    let seen = false;
+    const onMove = (e: PointerEvent) => {
+      const dx = e.clientX - lx;
+      const dy = e.clientY - ly;
+      if (!seen) {
+        seen = true;
+        lx = e.clientX;
+        ly = e.clientY;
+        return;
+      }
+      lx = e.clientX;
+      ly = e.clientY;
+      if (Math.abs(dx) < 1.5 && Math.abs(dy) < 1.5) return;
+      splats.push({
+        x: e.clientX / window.innerWidth,
+        y: 1 - e.clientY / window.innerHeight,
+        vx: dx * SMOKE.FORCE,
+        vy: -dy * SMOKE.FORCE,
+      });
+    };
+    const onResize = () => {
+      fit();
+      aspect = window.innerWidth / window.innerHeight;
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('resize', onResize);
+
+    const step = () => {
+      if (splats.length > SMOKE.MAX_SPLATS) splats.splice(0, splats.length - SMOKE.MAX_SPLATS);
+      if (splats.length > 0) {
+        activate(P.splat);
+        gl.uniform1f(P.splat.u('aspectRatio'), aspect);
+        gl.uniform1f(P.splat.u('uRadius'), SMOKE.RADIUS / 100);
+        for (let q = splats.length - 1; q >= 0; q--) {
+          const s = splats[q];
+          gl.uniform2f(P.splat.u('uPointer'), s.x, s.y);
+          gl.uniform3f(P.splat.u('uColor'), s.vx, s.vy, 10);
+          bind(P.splat, 'uTarget', 0, velocity.read.tex);
+          draw(velocity.write);
+          velocity.swap();
+          bind(P.splat, 'uTarget', 0, dye.read.tex);
+          draw(dye.write);
+          dye.swap();
+          splats.pop();
+        }
+      }
+      activate(P.curl);
+      bind(P.curl, 'uVelocity', 0, velocity.read.tex);
+      draw(curl);
+
+      activate(P.vorticity);
+      gl.uniform1f(P.vorticity.u('dt'), SMOKE.STEP);
+      gl.uniform1f(P.vorticity.u('uCurlValue'), SMOKE.CURL);
+      bind(P.vorticity, 'uVelocity', 0, velocity.read.tex);
+      bind(P.vorticity, 'uCurl', 1, curl.tex);
+      draw(velocity.write);
+      velocity.swap();
+
+      activate(P.divergence);
+      bind(P.divergence, 'uVelocity', 0, velocity.read.tex);
+      draw(divergence);
+
+      activate(P.clear);
+      gl.uniform1f(P.clear.u('uClearValue'), SMOKE.PRESSURE);
+      bind(P.clear, 'uTexture', 0, pressure.read.tex);
+      draw(pressure.write);
+      pressure.swap();
+
+      activate(P.pressure);
+      bind(P.pressure, 'uDivergence', 1, divergence.tex);
+      for (let i = 0; i < SMOKE.SWIRL; i++) {
+        bind(P.pressure, 'uPressure', 0, pressure.read.tex);
+        draw(pressure.write);
+        pressure.swap();
+      }
+
+      activate(P.gradient);
+      bind(P.gradient, 'uPressure', 0, pressure.read.tex);
+      bind(P.gradient, 'uVelocity', 1, velocity.read.tex);
+      draw(velocity.write);
+      velocity.swap();
+
+      activate(P.advection);
+      gl.uniform1f(P.advection.u('dt'), SMOKE.STEP);
+      gl.uniform1f(P.advection.u('uDissipation'), Math.pow(SMOKE.VELOCITY_DISSIPATION, 1));
+      bind(P.advection, 'uVelocity', 0, velocity.read.tex);
+      bind(P.advection, 'uSource', 1, velocity.read.tex);
+      draw(velocity.write);
+      velocity.swap();
+      gl.uniform1f(P.advection.u('uDissipation'), Math.pow(SMOKE.DENSITY_DISSIPATION, 1));
+      bind(P.advection, 'uVelocity', 0, velocity.read.tex);
+      bind(P.advection, 'uSource', 1, dye.read.tex);
+      draw(dye.write);
+      dye.swap();
+
+      gl.useProgram(P.display.p);
+      bind(P.display, 'tFluid', 0, dye.read.tex);
+      gl.uniform3f(P.display.u('uColor'), SMOKE.COLOR[0], SMOKE.COLOR[1], SMOKE.COLOR[2]);
+      gl.uniform1f(P.display.u('uBlend'), SMOKE.BLEND);
+      gl.uniform1f(P.display.u('uIntensity'), SMOKE.INTENSITY);
+      draw(null);
+    };
+
+    let raf = 0;
+    let dead = false;
+    let last = -1;
+    let acc = 0;
+    let idle = 0;
+    let blank = true;
+    const frame = (now: number) => {
+      if (dead) return;
+      raf = requestAnimationFrame(frame);
+      if (last >= 0) acc += (now - last) / 1000;
+      last = now;
+      if (acc < SMOKE.STEP - 0.001) return;
+      acc = Math.min(acc - SMOKE.STEP, SMOKE.STEP);
+      if (splats.length > 0) {
+        idle = 0;
+        blank = false;
+      } else if (++idle > SMOKE.IDLE_FRAMES) {
+        // nothing moved for a while: the smoke has faded, so rest (as the scene does)
+        if (!blank) {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.clearColor(0, 0, 0, 0);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          blank = true;
+        }
+        return;
+      }
+      step();
+    };
+    parent.appendChild(canvas);
+    raf = requestAnimationFrame(frame);
+
+    return {
+      destroy: () => {
+        dead = true;
+        cancelAnimationFrame(raf);
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('resize', onResize);
+        canvas.remove();
+        gl.getExtension('WEBGL_lose_context')?.loseContext();
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 type IntroProps = {
   /** Called once, right as the opening ring starts revealing the hero underneath. */
   onComplete: (name: string) => void;
@@ -239,14 +719,6 @@ const STALE = Symbol('stale');
 
 /** your page colour (--ink #04010f) as 0-1 values: the cover around the ring */
 const INK: [number, number, number] = [4 / 255, 1 / 255, 15 / 255];
-
-const LINES: [string, string, string][] = [
-  ['checking linkedin... last updated 3 years ago. ', 'bold strategy.', ''],
-  ["googled \"center a div\" this week... ", "we don't judge.", ''],
-  ['coffee intake: 4 cups before 9am. ', 'this is fine.', ' this is fine.'],
-  ['side projects found: 14. shipped: 0. ', 'respectable.', ''],
-];
-const CHECK = 'M5.5 12.8 C7 14 8.6 15.8 9.8 17.2 C12 12.5 15.2 8.2 19 5.8';
 
 export default function Intro({ onComplete }: IntroProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -278,16 +750,10 @@ export default function Intro({ onComplete }: IntroProps) {
     const who = $('#intro-who')!;
     const hint = $('#intro-hint')!;
     const tip = $('#intro-tip')!;
-    const sheet = $('#intro-sheet')!;
-    const sig = $('#intro-sig')!;
-    const pen = $('#intro-pen')!;
-    const rowsEl = $('#intro-rows')!;
-    const vtext = $('#intro-vtext')!;
-    const stamp = $('#intro-stamp')!;
-    const rf = root.querySelector<SVGCircleElement>('#intro-rf')!;
-    const pctNum = $('#intro-pctnum')!;
-    const dateEl = $('#intro-date')!;
-    const glow = $('#intro-glow')!;
+    const topBar = $('.' + styles.top)!;
+    const bar = $('#intro-bar')!;
+    const barFill = $('#intro-barfill')!;
+    const pct = $('#intro-pct')!;
 
     /* ---------- pacing helpers ---------- */
     function pace() {
@@ -312,29 +778,6 @@ export default function Intro({ onComplete }: IntroProps) {
       S.anims.push(a);
       return a.finished.catch(() => {});
     }
-    const eOut = (p: number) => 1 - Math.pow(1 - p, 3);
-    function tween(a: number, b: number, ms: number, fn: (v: number) => void, ease: (p: number) => number = eOut) {
-      const id = S.run;
-      ms = ms * pace();
-      return new Promise<void>((res) => {
-        if (ms <= 30) {
-          fn(b);
-          return res();
-        }
-        const t0 = performance.now();
-        (function f(now: number) {
-          if (id !== S.run) return res();
-          if (S.skip) {
-            fn(b);
-            return res();
-          }
-          const p = Math.min(1, (now - t0) / ms);
-          fn(a + (b - a) * ease(p));
-          if (p < 1) requestAnimationFrame(f);
-          else res();
-        })(t0);
-      });
-    }
     function clean(v: string) {
       return v.replace(/\s+/g, ' ').trim().slice(0, 24);
     }
@@ -342,70 +785,10 @@ export default function Intro({ onComplete }: IntroProps) {
       return s.toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
     }
 
-    /* ---------- cursor glow (page 1): a single compositor-friendly circle,
-       not a per-frame canvas redraw, so it stays smooth. ---------- */
-    let glowOn = false,
-      glowRaf = 0,
-      gx = 0,
-      gy = 0,
-      tgx = 0,
-      tgy = 0,
-      glowFrameT = 0,
-      tipShown = false;
+    /* ---------- the cursor smoke (name page + loading screen) ---------- */
+    const smoke = reduce ? null : createSmoke(root);
 
-    function glowMove(e: PointerEvent) {
-      tgx = e.clientX;
-      tgy = e.clientY;
-      if (glowOn) tipHide();
-    }
-    function glowDown(e: PointerEvent) {
-      if (!glowOn) return;
-      const r = document.createElement('i');
-      r.className = styles.ripple;
-      r.style.left = e.clientX + 'px';
-      r.style.top = e.clientY + 'px';
-      document.body.appendChild(r);
-      const an = r.animate(
-        [
-          { transform: 'scale(1)', opacity: 0.85 },
-          { transform: 'scale(13)', opacity: 0 },
-        ],
-        { duration: reduce ? 1 : 850, easing: 'cubic-bezier(.16,1,.3,1)' }
-      );
-      an.finished.then(() => r.remove()).catch(() => r.remove());
-      tipHide();
-    }
-    window.addEventListener('pointermove', glowMove, { passive: true });
-    window.addEventListener('pointerdown', glowDown, { passive: true });
-
-    function glowLoop(now: number) {
-      if (!glowOn) return;
-      const dt = glowFrameT ? Math.min(48, now - glowFrameT) : 16;
-      glowFrameT = now;
-      const k = 1 - Math.pow(0.001, dt / 1000);
-      gx += (tgx - gx) * k;
-      gy += (tgy - gy) * k;
-      glow.style.transform = `translate3d(${gx}px,${gy}px,0)`;
-      glowRaf = requestAnimationFrame(glowLoop);
-    }
-    function inkStart() {
-      if (reduce) return;
-      tgx = gx = window.innerWidth / 2;
-      tgy = gy = window.innerHeight * 0.4;
-      glowFrameT = 0;
-      glow.style.transform = `translate3d(${gx}px,${gy}px,0)`;
-      glow.style.opacity = '1';
-      glowOn = true;
-      cancelAnimationFrame(glowRaf);
-      glowRaf = requestAnimationFrame(glowLoop);
-    }
-    function inkStop() {
-      glowOn = false;
-      glow.style.opacity = '0';
-      setTimeout(() => {
-        if (!glowOn) cancelAnimationFrame(glowRaf);
-      }, 800);
-    }
+    let tipShown = false;
     function tipShow() {
       tip.textContent = fine ? 'move your cursor to leave a mark' : 'drag a finger to leave a mark';
       tipShown = true;
@@ -417,8 +800,10 @@ export default function Intro({ onComplete }: IntroProps) {
         play(tip, [{ opacity: 1 }, { opacity: 0 }], { duration: 400 });
       }
     }
+    const onFirstMove = () => tipHide();
+    window.addEventListener('pointermove', onFirstMove, { passive: true, once: true });
 
-    /* ---------- page 1 ---------- */
+    /* ---------- page 1: the name ---------- */
     function resetUI() {
       S.anims.forEach((a) => {
         try {
@@ -426,18 +811,11 @@ export default function Intro({ onComplete }: IntroProps) {
         } catch {}
       });
       S.anims = [];
-      document.querySelectorAll(`.${styles.dot}`).forEach((d) => d.remove());
       s1.hidden = false;
       s2.hidden = true;
       who.classList.remove(styles.has);
       hint.textContent = '';
       input.value = '';
-      rowsEl.innerHTML = '';
-      sig.textContent = '';
-      sig.style.clipPath = '';
-      pen.style.opacity = '0';
-      vtext.textContent = '';
-      setRing(0, true);
       tipShown = false;
     }
 
@@ -445,7 +823,6 @@ export default function Intro({ onComplete }: IntroProps) {
       const id = ++S.run;
       S.skip = false;
       resetUI();
-      inkStart();
       let stored = '';
       try {
         stored = window.localStorage.getItem('visitorName') || '';
@@ -495,7 +872,7 @@ export default function Intro({ onComplete }: IntroProps) {
       e.preventDefault();
       const v = clean(input.value);
       if (!v) {
-        hint.textContent = 'we need a name for the form';
+        hint.textContent = 'we need a name to continue';
         if (!reduce)
           play(
             input,
@@ -514,162 +891,37 @@ export default function Intro({ onComplete }: IntroProps) {
       try {
         window.localStorage.setItem('visitorName', v);
       } catch {}
-      startForm();
+      startLoading();
     }
     input.addEventListener('input', onInput);
     who.addEventListener('submit', onSubmit);
 
-    /* ---------- page 2: the clearance form ---------- */
-    function buildRows() {
-      rowsEl.innerHTML = '';
-      const NS = 'http://www.w3.org/2000/svg';
-      LINES.forEach((parts) => {
-        const li = document.createElement('li');
-        const svg = document.createElementNS(NS, 'svg');
-        svg.setAttribute('class', styles.cb);
-        svg.setAttribute('viewBox', '0 0 24 24');
-        svg.setAttribute('aria-hidden', 'true');
-        const r = document.createElementNS(NS, 'rect');
-        [
-          ['x', '3'],
-          ['y', '3'],
-          ['width', '18'],
-          ['height', '18'],
-          ['rx', '3'],
-          ['pathLength', '1'],
-        ].forEach(([k, v]) => r.setAttribute(k, v));
-        const pth = document.createElementNS(NS, 'path');
-        pth.setAttribute('d', CHECK);
-        pth.setAttribute('pathLength', '1');
-        svg.appendChild(r);
-        svg.appendChild(pth);
-        const tx = document.createElement('span');
-        tx.className = styles.rt;
-        tx.appendChild(document.createTextNode(parts[0]));
-        const mk = document.createElement('span');
-        mk.className = styles.mark;
-        mk.textContent = parts[1];
-        tx.appendChild(mk);
-        if (parts[2]) tx.appendChild(document.createTextNode(parts[2]));
-        li.appendChild(svg);
-        li.appendChild(tx);
-        rowsEl.appendChild(li);
-      });
-    }
-    function fitSig() {
-      sig.style.fontSize = '100px';
-      sig.textContent = S.name;
-      const avail = sig.parentElement?.clientWidth || 300;
-      const w = sig.offsetWidth || 1;
-      sig.style.fontSize = Math.max(30, Math.min(84, (100 * avail) / w * 0.96)) + 'px';
-    }
-    function setRing(p: number, instant?: boolean) {
-      if (instant) rf.style.transition = 'none';
-      rf.style.strokeDashoffset = String(100 - p);
-      if (instant) {
-        void rf.getBoundingClientRect();
-        rf.style.transition = '';
-      }
-      const from = parseInt(pctNum.textContent || '0', 10) || 0;
-      tween(from, p, instant ? 0 : 620, (v) => {
-        pctNum.textContent = String(Math.round(v));
-      });
-    }
-    function writeSig(id: number) {
+    /* ---------- page 2: the loading screen (the contact scene's loader, counting 0 to 100 %) ---------- */
+    function runCount(id: number) {
       return new Promise<void>((res) => {
-        const D = 1450 * pace();
-        const t0 = performance.now();
-        const w = sig.offsetWidth;
-        pen.style.opacity = '1';
-        (function f(now: number) {
-          if (id !== S.run) return res();
-          const p = D <= 30 || S.skip ? 1 : Math.min(1, (now - t0) / D);
-          const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
-          sig.style.clipPath = `inset(0 ${(1 - e) * 100}% 0 0)`;
-          pen.style.left = e * w + 'px';
-          pen.style.top = 52 + Math.sin(e * 20) * 10 + '%';
-          if (p < 1) requestAnimationFrame(f);
-          else {
-            pen.style.opacity = '0';
-            res();
-          }
-        })(t0);
+        const st = { p: 0 };
+        const tw = gsap.to(st, {
+          p: 1,
+          duration: Math.max(0.6, 3 * pace()),
+          ease: 'power1.inOut',
+          onUpdate: () => {
+            if (id !== S.run) {
+              tw.kill();
+              res();
+              return;
+            }
+            barFill.style.transform = `scaleX(${st.p})`;
+            const n = Math.round(st.p * 100);
+            pct.textContent = String(n).padStart(3, '0') + '%';
+            bar.setAttribute('aria-valuenow', String(n));
+          },
+          onComplete: () => res(),
+        });
       });
     }
-    async function doRow(li: HTMLElement, id: number) {
-      const box = li.querySelector<HTMLElement>('rect')!;
-      const ck = li.querySelector<HTMLElement>('path')!;
-      const rt = li.querySelector<HTMLElement>('.' + styles.rt)!;
-      await play(box, [{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: 160, easing: 'ease-out' });
-      chk(id);
-      await sleep(140, id);
-      await play(rt, [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }], {
-        duration: 560,
-        easing: 'cubic-bezier(.2,.8,.2,1)',
-      });
-      chk(id);
-      await sleep(180, id);
-      await play(ck, [{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], {
-        duration: 220,
-        easing: 'cubic-bezier(.5,0,.3,1)',
-      });
-      chk(id);
-    }
-    function splat(cx: number, cy: number) {
-      for (let i = 0; i < 14; i++) {
-        const d = document.createElement('i');
-        const s = 4 + Math.random() * 7;
-        const a = Math.random() * 6.2832;
-        const dist = 50 + Math.random() * 130;
-        d.className = styles.dot;
-        d.style.width = d.style.height = s + 'px';
-        d.style.left = cx - s / 2 + 'px';
-        d.style.top = cy - s / 2 + 'px';
-        document.body.appendChild(d);
-        const an = d.animate(
-          [
-            { transform: 'translate(0,0) scale(1)', opacity: 1 },
-            { transform: `translate(${Math.cos(a) * dist}px,${Math.sin(a) * dist}px) scale(.2)`, opacity: 0 },
-          ],
-          { duration: 520 + Math.random() * 380, easing: 'cubic-bezier(.1,.7,.3,1)', fill: 'forwards' }
-        );
-        an.finished.then(() => d.remove()).catch(() => d.remove());
-      }
-    }
-    async function slam(id: number) {
-      const r = stamp.getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      if (!reduce && !S.skip) {
-        setTimeout(() => {
-          if (id !== S.run) return;
-          s2.animate(
-            [
-              { transform: 'translate(0,0)' },
-              { transform: 'translate(-7px,5px)' },
-              { transform: 'translate(6px,-5px)' },
-              { transform: 'translate(-4px,3px)' },
-              { transform: 'translate(2px,-1px)' },
-              { transform: 'translate(0,0)' },
-            ],
-            { duration: 340, easing: 'ease-out' }
-          );
-          splat(cx, cy);
-        }, 300);
-      }
-      await play(
-        stamp,
-        [
-          { opacity: 0, transform: 'rotate(-20deg) scale(2.8)' },
-          { opacity: 1, transform: 'rotate(-10deg) scale(.93)', offset: 0.62 },
-          { opacity: 1, transform: 'rotate(-9deg) scale(1)' },
-        ],
-        { duration: 480, easing: 'cubic-bezier(.6,0,.3,1)' }
-      );
-      chk(id);
-    }
+
     /* ---------- the opening: the contact scene's ring, on your dark page ----------
-       1. the finished form fades out on the dark page (no white, no name),
+       1. the loading screen reaches 100 %,
        2. a dark cover canvas (same colour as the page, so nothing visibly changes) takes over,
        3. the hero is started NOW, while the screen is plain dark, and gets a moment to settle,
        4. the ring opens from the centre onto the live hero.
@@ -690,11 +942,8 @@ export default function Intro({ onComplete }: IntroProps) {
         handOver();
         return;
       }
-      await Promise.all([
-        play(s2, [{ opacity: 1 }, { opacity: 0 }], { duration: 500, easing: 'ease-out' }),
-        play($('.' + styles.top)!, [{ opacity: 1 }, { opacity: 0 }], { duration: 500, easing: 'ease-out' }),
-      ]);
       chk(id);
+      smoke?.destroy();
       const ring = createRing(INK, noiseImg);
       if (!ring) {
         handOver(); // no WebGL on this device: go straight to the hero
@@ -703,15 +952,15 @@ export default function Intro({ onComplete }: IntroProps) {
       root!.style.visibility = 'hidden';
       handOver();
       await frames(2);
-      await wait(450); // the hero's start-up work happens here, behind the plain dark cover
+      await wait(300); // the hero's start-up work happens here, behind the plain dark cover
       await ring.open();
       ring.destroy();
     }
-    async function startForm() {
+
+    async function startLoading() {
       const id = ++S.run;
       S.skip = false;
       try {
-        inkStop();
         tipHide();
         await Promise.all(
           $$('.' + styles.mk + ' > span')
@@ -726,44 +975,17 @@ export default function Intro({ onComplete }: IntroProps) {
               play(who, [{ opacity: 1, transform: 'translateY(0)' }, { opacity: 0, transform: 'translateY(-14px)' }], {
                 duration: 380,
               }),
+              play(topBar, [{ opacity: 1 }, { opacity: 0 }], { duration: 380 }),
             ])
         );
         chk(id);
         s1.hidden = true;
         s2.hidden = false;
-        buildRows();
-        fitSig();
-        dateEl.textContent = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-        await play(
-          sheet,
-          [
-            { opacity: 0, transform: 'translateY(90px) rotate(3.5deg)' },
-            { opacity: 1, transform: 'translateY(0) rotate(-1deg)' },
-          ],
-          { duration: 1050, easing: 'cubic-bezier(.16,1,.3,1)' }
-        );
+        await play(s2, [{ opacity: 0 }, { opacity: 1 }], { duration: 350, easing: 'ease-out' });
         chk(id);
-        setRing(8);
-        await writeSig(id);
+        await runCount(id);
         chk(id);
-        setRing(20);
-        await sleep(280, id);
-        const liRows = Array.from(rowsEl.querySelectorAll<HTMLElement>('li'));
-        for (let i = 0; i < liRows.length; i++) {
-          await doRow(liRows[i], id);
-          chk(id);
-          setRing(20 + (i + 1) * 17);
-          if (i < liRows.length - 1) await sleep(360, id);
-        }
-        vtext.textContent = 'vibe certified, ' + S.name.split(' ')[0].toLowerCase() + '. welcome to the good side.';
-        setRing(100);
-        await play(vtext, [{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)' }], {
-          duration: 650,
-          easing: 'cubic-bezier(.3,.7,.3,1)',
-        });
-        chk(id);
-        await slam(id);
-        await sleep(950, id);
+        await sleep(200, id); // the scene also rests 0.2 s on 100 % before it opens
         await ringOut(id);
       } catch (e) {
         if (e !== STALE) throw e;
@@ -797,34 +1019,18 @@ export default function Intro({ onComplete }: IntroProps) {
           a.cancel();
         } catch {}
       });
-      window.removeEventListener('pointermove', glowMove);
-      window.removeEventListener('pointerdown', glowDown);
+      window.removeEventListener('pointermove', onFirstMove);
       input.removeEventListener('input', onInput);
       who.removeEventListener('submit', onSubmit);
-      cancelAnimationFrame(glowRaf);
+      smoke?.destroy();
       document.body.style.overflow = '';
-      document.querySelectorAll(`.${styles.dot}, .${styles.ripple}`).forEach((d) => d.remove());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <div ref={rootRef} className={styles.introRoot}>
-      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true" focusable="false">
-        <defs>
-          <filter id="rough" x="-5%" y="-5%" width="110%" height="110%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves={2} seed={3} result="n" />
-            <feDisplacementMap in="SourceGraphic" in2="n" scale={3.5} />
-          </filter>
-          <filter id="specks" x="0" y="0" width="100%" height="100%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves={1} seed={4} />
-            <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  9 0 0 0 -5.7" />
-          </filter>
-        </defs>
-      </svg>
-
       <div className={styles.backdrop} aria-hidden="true" />
-      <div id="intro-glow" className={styles.glow} aria-hidden="true" />
 
       <header className={styles.top}>
         <span className={styles.brand}>Shubhrato Corp.</span>
@@ -873,73 +1079,36 @@ export default function Intro({ onComplete }: IntroProps) {
           </div>
         </section>
 
-        {/* Page 2 */}
-        <section id="intro-s2" className={`${styles.stage} ${styles.s2}`} hidden aria-label="Visitor clearance form">
-          <div className={styles.inner}>
-            <article id="intro-sheet" className={styles.sheet}>
-              <div className={styles.holes} aria-hidden="true">
-                <i />
-                <i />
+        {/* Page 2: the loading screen (same markup as the contact scene's loader, without the logo) */}
+        <section id="intro-s2" className={styles.loader} hidden aria-label="Loading">
+          <div className={styles.lContainer}>
+            <div className={styles.lContent}>
+              <p className={styles.lText}>
+                Production AI systems and backend products, built to be fast, secure and scalable
+              </p>
+            </div>
+            <div className={styles.lProgress}>
+              <div
+                id="intro-bar"
+                className={styles.lBar}
+                role="progressbar"
+                aria-label="Loading"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={0}
+              >
+                <div id="intro-barfill" className={styles.lBarFill} />
               </div>
-              <header className={styles.shHead}>
-                <div>
-                  <p className={styles.corp}>Shubhrato Corp.</p>
-                  <h2>
-                    Visitor <em>Clearance</em>
-                  </h2>
-                </div>
-                <div className={styles.ring} aria-hidden="true">
-                  <svg viewBox="0 0 44 44">
-                    <circle className={styles.rb} cx={22} cy={22} r={18} />
-                    <circle id="intro-rf" className={styles.rf} cx={22} cy={22} r={18} pathLength={100} />
-                  </svg>
-                  <span id="intro-pctnum">0</span>
-                </div>
-              </header>
-              <div className={styles.meta}>
-                <span>Form 27-B</span>
-                <span id="intro-date" />
+              <div className={styles.lWait} aria-hidden="true">
+                <span>Experience</span>
+                <span>is loading</span>
+                <span>please</span>
+                <span>wait</span>
+                <span id="intro-pct">000%</span>
+                <span>out of</span>
+                <span>100%</span>
               </div>
-              <div className={styles.field}>
-                <p className={styles.lab}>Applicant</p>
-                <div className={styles.sigWrap}>
-                  <div id="intro-sig" className={styles.sig} />
-                  <i id="intro-pen" className={styles.pen} />
-                </div>
-                <div className={styles.sigRule} />
-              </div>
-              <div className={styles.field}>
-                <p className={styles.lab}>Background check</p>
-                <ul id="intro-rows" className={styles.rows} aria-live="polite" />
-              </div>
-              <footer className={styles.verdict}>
-                <p className={styles.lab}>Verdict</p>
-                <p id="intro-vtext" className={styles.vtext} />
-                <div id="intro-stamp" className={styles.stamp} aria-hidden="true">
-                  <svg viewBox="0 0 320 136">
-                    <defs>
-                      <mask id="worn" maskUnits="userSpaceOnUse" x={0} y={0} width={320} height={136}>
-                        <rect width={320} height={136} fill="#fff" />
-                        <rect width={320} height={136} fill="#000" filter="url(#specks)" />
-                      </mask>
-                    </defs>
-                    <g filter="url(#rough)" mask="url(#worn)" fill="none" stroke="#FF5A46">
-                      <rect x={5} y={5} width={310} height={126} rx={10} strokeWidth={7} />
-                      <rect x={16} y={16} width={288} height={104} rx={5} strokeWidth={2.5} />
-                      <text x={160} y={40} textAnchor="middle" fill="#FF5A46" stroke="none" fontFamily="JetBrains Mono, monospace" fontSize={11} letterSpacing={3.5}>
-                        SHUBHRATO CORP.
-                      </text>
-                      <text x={160} y={92} textAnchor="middle" fill="#FF5A46" stroke="none" fontFamily="Anton, Impact, sans-serif" fontSize={64} letterSpacing={6}>
-                        HIRED
-                      </text>
-                      <text x={160} y={112} textAnchor="middle" fill="#FF5A46" stroke="none" fontFamily="JetBrains Mono, monospace" fontSize={10} letterSpacing={3}>
-                        PEOPLE DEPT. APPROVED
-                      </text>
-                    </g>
-                  </svg>
-                </div>
-              </footer>
-            </article>
+            </div>
           </div>
         </section>
       </main>
