@@ -145,7 +145,7 @@ export default function About() {
   }, []);
 
   return (
-    <section ref={rootRef} id="about" className={`${styles.about} ${script.variable}`}>
+    <section ref={rootRef} id="about" className={`${styles.about} ${script.variable}`} data-wk-smoke>
   <div className={styles.statement}>
     <p className={styles.statementText}><span className={styles.indent} aria-hidden="true"></span><span data-statement data-split>I don&apos;t just wire up models. I build AI systems that retrieve the right thing, fail loudly, and are worth trusting. From the first prototype to the last deploy, I care about the details that make software feel dependable and worth coming back to.</span></p>
   </div>
