@@ -22,34 +22,6 @@
   background: var(--ink);
 }
 
-/* cursor glow (page 1) */
-.glow {
-  position: fixed;
-  left: 0;
-  top: 0;
-  width: 560px;
-  height: 560px;
-  margin: -280px 0 0 -280px;
-  border-radius: 50%;
-  z-index: 1;
-  pointer-events: none;
-  background: radial-gradient(closest-side, rgba(76, 111, 255, 0.24), rgba(76, 111, 255, 0.08) 45%, transparent 72%);
-  filter: blur(4px);
-  opacity: 0;
-  transition: opacity 0.8s ease;
-  will-change: transform;
-}
-.ripple {
-  position: fixed;
-  z-index: 2;
-  width: 16px;
-  height: 16px;
-  margin: -8px 0 0 -8px;
-  border-radius: 50%;
-  pointer-events: none;
-  background: radial-gradient(closest-side, rgba(160, 184, 255, 0.6), rgba(90, 120, 255, 0.28) 55%, transparent 75%);
-}
-
 /* header */
 .top {
   position: fixed;
@@ -85,11 +57,6 @@
 .inner {
   margin: auto 0;
   width: min(1240px, 100%);
-}
-.s2 .inner {
-  margin: auto;
-  display: flex;
-  justify-content: center;
 }
 .s1 .inner {
   margin: auto;
@@ -226,230 +193,6 @@
   color: var(--muted);
 }
 
-/* page 2: the form */
-.sheet {
-  position: relative;
-  width: min(640px, 100%);
-  margin: auto;
-  opacity: 0;
-  transform-origin: 50% 100%;
-  padding: clamp(22px, 3.6vh, 38px) clamp(22px, 4vw, 40px) clamp(22px, 3.4vh, 34px) clamp(36px, 5.2vw, 58px);
-  background: var(--card);
-  border-radius: 6px;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05), 0 45px 90px -30px rgba(0, 0, 0, 0.75), 0 0 90px -18px rgba(76, 111, 255, 0.28);
-}
-.sheet::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  opacity: 0.4;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='.04 .9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23f)'/></svg>");
-}
-.holes {
-  position: absolute;
-  left: 14px;
-  top: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-around;
-  padding: 44px 0;
-}
-.holes i {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--ink);
-  box-shadow: inset 0 1px 2px rgba(14, 13, 11, 0.4);
-}
-.shHead {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-}
-.corp {
-  margin: 0 0 4px;
-  font: 500 0.68rem/1 var(--mono);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.shHead h2 {
-  margin: 0;
-  font: 400 clamp(1.9rem, 4.6vw, 2.6rem) / 1 var(--serif);
-  letter-spacing: -0.01em;
-}
-.shHead h2 em {
-  font-style: italic;
-}
-.ring {
-  position: relative;
-  flex: none;
-  width: 46px;
-  height: 46px;
-}
-.ring svg {
-  width: 100%;
-  height: 100%;
-  transform: rotate(-90deg);
-}
-.ring circle {
-  fill: none;
-  stroke-width: 3;
-}
-.rb {
-  stroke: var(--line);
-}
-.rf {
-  stroke: var(--cobalt);
-  stroke-linecap: round;
-  stroke-dasharray: 100;
-  stroke-dashoffset: 100;
-  transition: stroke-dashoffset 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.ring span {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font: 500 0.62rem/1 var(--mono);
-  color: var(--moon);
-}
-.meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 14px;
-  padding: 8px 0;
-  border-top: 1.5px solid var(--moon);
-  border-bottom: 1px solid var(--line);
-  font: 500 0.66rem/1 var(--mono);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.field {
-  margin-top: clamp(12px, 2.2vh, 22px);
-}
-.lab {
-  margin: 0 0 4px;
-  font: 500 0.68rem/1 var(--mono);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.sigWrap {
-  position: relative;
-  min-height: 1.1em;
-}
-.sig {
-  display: inline-block;
-  padding: 0.05em 0.3em 0.05em 0;
-  font: 400 84px/1 var(--script);
-  color: var(--moon);
-  white-space: nowrap;
-  clip-path: inset(0 100% 0 0);
-}
-.pen {
-  position: absolute;
-  left: 0;
-  top: 55%;
-  width: 9px;
-  height: 9px;
-  margin: -4px 0 0 -4px;
-  border-radius: 50%;
-  background: var(--cobalt);
-  box-shadow: 0 0 0 5px rgba(76, 111, 255, 0.35);
-  opacity: 0;
-}
-.sigRule {
-  height: 1px;
-  background: var(--moon);
-  opacity: 0.8;
-}
-.rows {
-  list-style: none;
-  margin: 2px 0 0;
-  padding: 0;
-}
-.rows li {
-  display: grid;
-  grid-template-columns: 26px 1fr;
-  gap: 12px;
-  padding: clamp(7px, 1.3vh, 11px) 0;
-  border-bottom: 1px dashed var(--line);
-}
-.cb {
-  width: 24px;
-  height: 24px;
-  margin-top: 1px;
-  overflow: visible;
-}
-.cb rect {
-  fill: none;
-  stroke: var(--moon);
-  stroke-width: 1.5;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-}
-.cb path {
-  fill: none;
-  stroke: var(--cobalt);
-  stroke-width: 2.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-}
-.rt {
-  font: 400 clamp(0.95rem, 2.2vw, 1.05rem) / 1.45 var(--sans);
-  opacity: 0;
-  transform: translateY(10px);
-}
-.rt .mark {
-  color: var(--tint);
-  font-weight: 500;
-}
-.verdict {
-  position: relative;
-  margin-top: clamp(14px, 2.4vh, 24px);
-  padding-top: 14px;
-  border-top: 1.5px solid var(--moon);
-  min-height: clamp(108px, 15vh, 132px);
-}
-.vtext {
-  margin: 0;
-  max-width: 13em;
-  font: italic 400 clamp(1.3rem, 3.2vw, 1.7rem) / 1.2 var(--serif);
-  clip-path: inset(0 100% 0 0);
-}
-.stamp {
-  position: absolute;
-  right: -8px;
-  bottom: -6px;
-  width: min(250px, 48%);
-  opacity: 0;
-  transform: rotate(-9deg);
-  pointer-events: none;
-  filter: drop-shadow(0 0 24px rgba(255, 90, 70, 0.4));
-}
-.stamp svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-.dot {
-  position: fixed;
-  z-index: 30;
-  border-radius: 50%;
-  background: var(--red);
-  pointer-events: none;
-}
-
 /* the opening ring canvas (created on <body> by createRing in Intro.tsx) */
 .ring {
   position: fixed;
@@ -460,16 +203,168 @@
   pointer-events: none;
 }
 
-@media (max-width: 560px) {
-  .shHead h2 {
-    font-size: 1.8rem;
+/* the cursor smoke canvas (inside the intro, behind the text) */
+.smoke {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ---------- the loading screen: the contact scene's loader (same layout and text styles) ---------- */
+@font-face {
+  font-family: "Intro Plex Mono";
+  src: url("/contact-scene/fonts/IBMPlexMono-Medium-Latin1.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+.loader {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  padding-bottom: 1.25rem;
+  font: 500 0.75rem/1.25 "Intro Plex Mono", "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  text-transform: uppercase;
+  color: #fff;
+}
+.lContainer {
+  box-sizing: border-box;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 0 3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+.lContent {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  text-align: center;
+}
+.lText {
+  margin: 0;
+  width: 100%;
+  max-width: 16.875rem;
+}
+.lProgress {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+.lBar {
+  position: relative;
+  width: 100%;
+  height: 0.125rem;
+  border-radius: 0.0625rem;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.16);
+}
+.lBarFill {
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.12s linear;
+}
+.lWait {
+  width: 100%;
+  display: grid;
+  grid-auto-flow: row;
+  grid-template-columns: repeat(12, 1fr);
+  column-gap: 1rem;
+  color: #8b87a8;
+}
+.lWait span:nth-child(1) {
+  grid-column: 1 / span 1;
+}
+.lWait span:nth-child(2) {
+  grid-column: 4 / span 2;
+  display: block;
+}
+.lWait span:nth-child(2)::after {
+  content: "";
+  position: absolute;
+  animation: introDots 1s steps(4) infinite;
+}
+.lWait span:nth-child(3) {
+  grid-column: 7 / span 1;
+}
+.lWait span:nth-child(4) {
+  grid-column: 8 / span 1;
+}
+.lWait span:nth-child(5) {
+  grid-column: 10 / span 1;
+  color: #9047ff;
+}
+.lWait span:nth-child(6) {
+  grid-column: 11 / span 1;
+  color: #fff;
+}
+.lWait span:nth-child(7) {
+  grid-column: 12 / span 1;
+  justify-self: end;
+  color: #fff;
+}
+@keyframes introDots {
+  0%,
+  20% {
+    content: "";
   }
-  .stamp {
-    width: 54%;
+  40% {
+    content: ".";
+  }
+  60% {
+    content: "..";
+  }
+  80%,
+  100% {
+    content: "...";
+  }
+}
+@media (max-width: 1024px) {
+  .lContainer {
+    padding: 0 2rem;
+  }
+  .lWait {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .lWait span:nth-child(2) {
+    grid-column: 2 / span 1;
+    white-space: nowrap;
+    width: calc(100% + 3ch);
+  }
+  .lWait span:nth-child(3),
+  .lWait span:nth-child(4),
+  .lWait span:nth-child(6) {
+    display: none;
+  }
+  .lWait span:nth-child(5) {
+    grid-column: 3 / span 1;
+    justify-self: end;
+  }
+  .lWait span:nth-child(7) {
+    grid-column: 4 / span 1;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rf,
   .go,
   .go svg {
     transition: none;
