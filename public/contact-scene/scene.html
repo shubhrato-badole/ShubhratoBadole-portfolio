@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en" translate="no" data-theme="dark">
+<head>
+<!-- ===== portfolio embed layer (added; everything below is ours, not part of the original build) ===== -->
+<meta name="scene-build" content="v4">
+<script type="importmap">{ "imports": { "/contact-scene/_nuxt/DL4QAMwX.js": "/contact-scene/_nuxt/DL4QAMwX.v4.js" } }</script>
+<style>
+  /* the portfolio has its own nav, so the original top bar is hidden */
+  header.header, nav.mobile-nav { display: none !important; } /* + the small-screen menu pill */
+  /* no-sound build: the "enter with / without audio" screen is skipped automatically */
+  .loader__actions { opacity: 0 !important; pointer-events: none !important; }
+  /* the form only builds an email (mailto:), which cannot carry a file, so the attach button is hidden */
+  .contact-form__attach { display: none !important; }
+  /* DARK instead of white: the scene's own dark theme (cookie below) gives the loader and the area around the
+     opening ring the original's dark colour. */
+  /* no landing screen: nothing is shown while the scene waits; it goes straight into the opening ring */
+  .loader { opacity: 0 !important; }
+  .loader__logo { display: none !important; }                      /* no name on the loader */
+  .loader__bar { background: rgba(255, 255, 255, 0.16) !important; } /* progress track readable on dark */
+  /* the scene's own AI assistant (orb + speech bubble + chat) is removed: the portfolio has its own assistant */
+  .ai-btn, .ai-bubble, .ai-overlay { display: none !important; }
+  /* LAKE MODE (?start=lake): only the 3D lake is shown (no page text / UI) until the portfolio opens the contact page */
+  html.lake-mode .ui { visibility: hidden !important; }
+  /* "What I can do" is a plain list now (nothing to choose) */
+  .radio-item-wrapper { cursor: default !important; }
+  .radio-item-wrapper:hover { color: var(--foreground) !important; }
+</style>
+<script>
+(function () {
+  try { console.info('[contact-scene] build v4'); } catch (e) {}
+  /* the scene reads its light / dark theme from a cookie (default: light = white). Dark = the original's dark loader. */
+  try { if (!/(?:^|; )theme=dark\b/.test(document.cookie)) document.cookie = 'theme=dark; path=/; max-age=31536000; SameSite=Lax'; } catch (e) {}
+
+  /* ?start=lake -> the scene boots on its lake view (the engine's "/" page: night, water, rocks, grass, no purple ring,
+     no text) and waits there. The portfolio's scroll-reveal shows it under the Work section, then sends "open-contact"
+     to continue to the form. Without it the scene boots straight on the form, exactly as before. */
+  var LAKE = /[?&]start=lake(&|$)/.test(location.search);
+  /* ?wait=1 (form page opened by the portfolio's Contact button): the scene waits for the page's "enter" message
+     instead of opening by itself when it is scrolled into view, so the opening animation is seen on arrival */
+  var WAIT = /[?&]wait=1(&|$)/.test(location.search);
+  var lake = { on: LAKE, hs: null, paused: false };
+  if (LAKE) document.documentElement.classList.add('lake-mode');
+
+  /* the scene's router must see the page it was built as: /contact for the form, "/" for the lake */
+  try { history.replaceState(history.state, '', (LAKE ? '/' : '/contact') + location.search); } catch (e) {}
+
+  /* while the page says "pause" (the lake hidden behind Work, or the contact page covered by Work) the scene renders at ~2 fps */
+  if (window.parent !== window) {
+    var rafReal = window.requestAnimationFrame.bind(window), cafReal = window.cancelAnimationFrame.bind(window);
+    var held = {}, heldSeq = 1e9, heldTimer = 0;
+    var flushHeld = function () { var q = held; held = {}; Object.keys(q).forEach(function (k) { rafReal(q[k]); }); };
+    window.requestAnimationFrame = function (cb) {
+      if (!lake.paused) return rafReal(cb);
+      var id = ++heldSeq; held[id] = cb;
+      if (!heldTimer) heldTimer = setInterval(function () { if (lake.paused) flushHeld(); }, 500);
+      return id;
+    };
+    window.cancelAnimationFrame = function (id) { if (id > 1e9) delete held[id]; else cafReal(id); };
+    var setPaused = function (p) {
+      if (p === lake.paused) return;
+      lake.paused = p;
+      if (!p) { clearInterval(heldTimer); heldTimer = 0; flushHeld(); }
+    };
+  }
+
+  var host = window.parent !== window ? window.parent : null;
+  function send(msg) {
+    if (!host) return;
+    msg.source = 'contact-scene';
+    host.postMessage(msg, location.origin);
+  }
+
+  /* dark only for the loader and the opening ring; once the ring has opened, the scene goes back to its usual colours */
+  var rootEl = document.documentElement;
+  function startBack() {
+    var go = function () {
+      setTimeout(function () {
+        rootEl.setAttribute('data-theme', 'light');
+        try { document.cookie = 'theme=light; path=/; max-age=31536000; SameSite=Lax'; } catch (e) {}
+        /* after the lake -> contact navigation the scene re-applies its own (dark) theme once the route has changed:
+           keep the usual colours (this only happens in lake mode; on the form page nothing re-applies it) */
+        if (LAKE) {
+          new MutationObserver(function () {
+            if (rootEl.getAttribute('data-theme') !== 'light') rootEl.setAttribute('data-theme', 'light');
+          }).observe(rootEl, { attributes: true, attributeFilter: ['data-theme'] });
+        }
+      }, 2400);
+    };
+    if (rootEl.classList.contains('loaded')) { go(); return; }
+    var back = new MutationObserver(function () {
+      if (!rootEl.classList.contains('loaded')) return;
+      back.disconnect();
+      go();
+    });
+    back.observe(rootEl, { attributes: true, attributeFilter: ['class'] });
+  }
+  /* on the form page this runs at boot, as before. In lake mode it waits until the contact page is opened. */
+  if (!LAKE) startBack();
+
+  /* 1. no sound -> the "enter with / without audio" screen is skipped automatically.
+        Inside the portfolio the scene WAITS at its loader and opens (loader leaves, camera flies
+        in to the tree) only when the visitor scrolls to it, so the opening animation is seen. */
+  var allowed = !host || LAKE;              /* opened on its own page: enter at once. The lake opens by itself (it is hidden behind the page). */
+  var lakeSetUp = !LAKE;                    /* lake mode waits until its patches are installed */
+  var gate = new MutationObserver(tryEnter);
+  function tryEnter() {
+    if (!allowed || !lakeSetUp || !document.querySelector('.loader--ready')) return;
+    var btns = document.querySelectorAll('.loader__actions button');
+    for (var i = 0; i < btns.length; i++) {
+      if (/without audio/i.test(btns[i].textContent || '')) {
+        gate.disconnect();
+        btns[i].click();
+        return;
+      }
+    }
+  }
+  gate.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+  /* opens by itself as soon as it is scrolled into view: works even if the page never sends a message
+     (not in wait mode: there the page decides when) */
+  if (!WAIT) try {
+    var seen = new IntersectionObserver(function (es) {
+      for (var i = 0; i < es.length; i++) {
+        if (es[i].isIntersecting) { seen.disconnect(); allowed = true; tryEnter(); break; }
+      }
+    }, { threshold: 0.3 });
+    /* a window-sized invisible marker: its visible share = how much of the scene is on screen */
+    var watch = function () {
+      var m = document.createElement('div');
+      m.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;visibility:hidden';
+      document.body.appendChild(m);
+      seen.observe(m);
+    };
+    if (document.body) watch(); else document.addEventListener('DOMContentLoaded', watch);
+  } catch (err) { allowed = true; }
+
+  /* ---- lake mode: the engine's own home view minus the purple particle ring and the page text ---- */
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  async function setUpLake() {
+    var hs = null, world = null;
+    try {
+      var mod = await import('/contact-scene/_nuxt/T7ii45zO.js');
+      world = mod.b();
+      for (var i = 0; i < 900 && !hs; i++) {
+        var m = world.manager.master && world.manager.master.value;
+        var h = m && m.heroScene;
+        if (h && h.particles && h.particles.particles && h.pageTexts) hs = h; else await sleep(100);
+      }
+      if (hs) {
+        /* the ring: the engine shows it whenever no landmark is active, so keep it off while the lake is up */
+        var pts = hs.particles.particles, vis = pts.visible;
+        Object.defineProperty(pts, 'visible', { configurable: true, get: function () { return false; }, set: function (v) { vis = v; } }); /* never: the ring belongs to the home page only */
+        /* the headline text is drawn in WebGL: skip its reveal, and keep every page-text group hidden, until the lake is left */
+        var reveal = hs.playPageTextReveal;
+        hs.playPageTextReveal = function () { if (lake.on) return; return reveal.apply(this, arguments); };
+        Object.keys(hs.pageTexts).forEach(function (k) {
+          var g = hs.pageTexts[k] && hs.pageTexts[k].text && hs.pageTexts[k].text.group;
+          if (!g) return;
+          var gv = g.visible;
+          /* the headline of the home page (hero / about / not-found) must never show; only the contact text, once the lake is left */
+          Object.defineProperty(g, 'visible', { configurable: true, get: function () { return k === 'contacts' && !lake.on ? gv : false; }, set: function (v) { gv = v; } });
+        });
+        try { hs.setEnergyFiringSuppressed(true); } catch (e) {}
+        lake.hs = hs;
+      }
+    } catch (e) { console.warn('[lake] setup failed, showing the default scene', e); }
+    lakeSetUp = true;
+    tryEnter();
+    if (!world) return;
+    for (var k = 0; k < 900 && !world.manager.state.introPlayed; k++) await sleep(200);
+    await sleep(400);
+    send({ type: 'lake-ready' });
+  }
+  if (LAKE) setUpLake();
+
+  /* leave the lake: show the page UI again and do the engine's own "/" -> "/contact" navigation, so the camera
+     flies to the tree and the form appears exactly as on the original site. The usual dark -> light colour
+     change then runs 2.4 s later, as it does when the scene opens on the form. */
+  function openContact() {
+    if (!LAKE || !lake.on) return;
+    lake.on = false;
+    if (typeof setPaused === 'function') setPaused(false);
+    document.documentElement.classList.remove('lake-mode');
+    try { lake.hs && lake.hs.setEnergyFiringSuppressed(false); } catch (e) {}
+    var a = document.querySelector('a[href="/contact"]');
+    window.__allowNav = true;
+    try { a ? a.click() : history.pushState(null, '', '/contact'); } finally { window.__allowNav = false; }
+    startBack();
+  }
+
+  window.addEventListener('message', function (e) {
+    if (e.origin !== location.origin || e.source !== host || !e.data) return;
+    if (e.data.type === 'enter') { allowed = true; tryEnter(); }
+    else if (e.data.type === 'open-contact') openContact();
+    else if (e.data.type === 'pause' && typeof setPaused === 'function') setPaused(true);
+    else if (e.data.type === 'resume' && typeof setPaused === 'function') setPaused(false);
+  });
+
+  /* 2. links: files / external -> new tab, site routes -> scroll the portfolio */
+  document.addEventListener('click', function (e) {
+    if (window.__allowNav) return; /* the lake -> contact navigation above */
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a) return;
+    var raw = a.getAttribute('href') || '';
+    if (raw.charAt(0) !== '/' && !/^https?:/i.test(raw)) return; /* mailto:, tel:, # stay as they are */
+    var u = new URL(a.href, location.href);
+    if (u.origin === location.origin) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (/\.[a-z0-9]+$/i.test(u.pathname)) { window.open(a.href, '_blank', 'noopener'); return; }
+      var map = { '/': 'top', '/about': 'about', '/projects': 'work', '/contact': 'contact' };
+      if (map[u.pathname]) send({ type: 'goto', id: map[u.pathname] });
+    } else if (a.target !== '_blank') {
+      e.preventDefault(); e.stopImmediatePropagation();
+      window.open(a.href, '_blank', 'noopener');
+    }
+  }, true);
+
+  /* 3. scroll hand-off: at the top / bottom of the form, the wheel scrolls the portfolio */
+  var scroller = null;
+  window.addEventListener('wheel', function (e) {
+    if (!host || lake.on || e.ctrlKey) return;
+    if (e.target && e.target.closest && e.target.closest('[data-lenis-prevent]')) return;
+    if (!scroller || !scroller.isConnected) scroller = document.querySelector('.smooth-scroll');
+    if (!scroller) return;
+    var dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * innerHeight : e.deltaY;
+    var atTop = scroller.scrollTop <= 1;
+    var atEnd = scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - 1;
+    if ((dy < 0 && atTop) || (dy > 0 && atEnd)) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      send({ type: 'wheel', dy: dy });
+    }
+  }, { capture: true, passive: false });
+})();
+</script>
+<!-- ===== end embed layer ===== -->
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact — Shubhrato Badole</title>
+<meta name="description" content="Tell me about your project — I reply within 24 hours. Software, AI and backend engineer based in Maharashtra, India.">
+<meta name="author" content="Shubhrato Badole">
+<meta name="google" content="notranslate">
+<meta name="theme-color" content="#000000">
+<script>(function(){var m=document.cookie.match(/(?:^|; )theme=(dark|light)\b/);if(m)document.documentElement.setAttribute('data-theme',m[1])})()</script>
+<style id="theme-tokens">:root{--primary:#9047ff;--primary-rgb:144,71,255;--primary-active:#7114ff;--primary-active-rgb:113,20,255;--status-danger:#ff3b30;--status-danger-rgb:255,59,48;--status-danger-active:#c91b11;--status-danger-active-rgb:201,27,17;--status-success:#319f43;--status-success-rgb:49,159,67;--background:#f5efff;--background-rgb:245,239,255;--foreground:#2a1647;--foreground-rgb:42,22,71;--foreground-muted:#64698b;--foreground-muted-rgb:100,105,139;--border:#e2e4f0;--border-rgb:226,228,240;--card:#fff;--card-rgb:255,255,255;--muted:#f1f2f9;--muted-rgb:241,242,249;--contrast:#000;--contrast-rgb:0,0,0;--glass:#fff;--glass-rgb:255,255,255;--backdrop:rgba(0, 0, 0, 0.8);--backdrop-rgb:0,0,0;--btn-color:var(--color-purple-900)}:root[data-theme='dark']{--primary:#9047ff;--primary-rgb:144,71,255;--primary-active:#7114ff;--primary-active-rgb:113,20,255;--status-danger:#ff3b30;--status-danger-rgb:255,59,48;--status-danger-active:#c91b11;--status-danger-active-rgb:201,27,17;--status-success:#319f43;--status-success-rgb:49,159,67;--background:#121212;--background-rgb:18,18,18;--foreground:#fff;--foreground-rgb:255,255,255;--foreground-muted:#a3a6c1;--foreground-muted-rgb:163,166,193;--border:#30343f;--border-rgb:48,52,63;--card:#181818;--card-rgb:24,24,24;--muted:#25282e;--muted-rgb:37,40,46;--contrast:#fff;--contrast-rgb:255,255,255;--glass:#000;--glass-rgb:0,0,0;--backdrop:rgba(0, 0, 0, 0.9);--backdrop-rgb:0,0,0;--btn-color:#e5e5e5;--btn-color-rgb:229,229,229}</style>
+<style>html{background:#000}.ui[data-v-018a63a1]{color:var(--color-base-white);opacity:0;position:relative;z-index:2}.ui.is-assistant-active[data-v-018a63a1]{pointer-events:none}</style>
+
+<link rel="stylesheet" href="/contact-scene/_nuxt/entry.CupBdwrZ.css" crossorigin>
+<link rel="stylesheet" href="/contact-scene/_nuxt/FooterBottom.D44KseFs.css" crossorigin>
+<link rel="stylesheet" href="/contact-scene/_nuxt/InfoLabel.DqyvPKau.css" crossorigin>
+<link rel="stylesheet" href="/contact-scene/_nuxt/contact.DbI0CKbH.css" crossorigin>
+
+<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/T7ii45zO.js">
+<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/basis_transcoder.o4Hde_L7.js">
+<link rel="preload" as="font" crossorigin href="/contact-scene/fonts/PPNeueMontreal-Medium.woff2">
+<link rel="preload" as="font" crossorigin href="/contact-scene/fonts/IBMPlexMono-Medium-Latin1.woff2">
+<link rel="preload" as="font" crossorigin href="/contact-scene/fonts/EmotionSerif-Light.woff2">
+<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/BZDeO1lC.js">
+<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/DL4QAMwX.v4.js">
+<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/BGBHjvBH.js">
+<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/CV6D6F_8.js">
+<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/D33KF0pv.js">
+<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/DQ4dAt_m.js">
+<link rel="prefetch" href="/contact-scene/_nuxt/basis_transcoder.VXdx5NbI.wasm">
+<link rel="prefetch" as="image" type="image/png" href="/contact-scene/_nuxt/fallLeaf.DlVBl2Oz.png">
+
+<script type="module" src="/contact-scene/_nuxt/T7ii45zO.js" crossorigin></script>
+</head>
+<body>
+<div id="__nuxt"></div>
+<div id="teleports"></div>
+<script>
+/* #__nuxt is intentionally empty: Vue performs a full mount instead of hydrating, so the patched Contact
+   markup can't cause a hydration mismatch, while the pre-seeded payload below stops the app from querying
+   the agency's content database. Runtime config is the original minus its Google Tag Manager id and Calendly link. */
+window.__NUXT__={};window.__NUXT__.config={public:{siteUrl:"https://shubhrato.in",gtag:{enabled:false,initMode:"manual",id:"",initCommands:[],config:{},tags:[],loadingStrategy:"defer",url:"https://www.googletagmanager.com/gtag/js"},mdc:{components:{prose:true,map:{},customElements:[]},headings:{anchorLinks:false},highlight:{noApiRoute:true,highlighter:"shiki",theme:{default:"github-light",dark:"github-dark"},shikiEngine:"oniguruma",langs:["js","jsx","json","ts","tsx","vue","css","html","bash","md","mdc","yaml"]}},content:{wsUrl:""}},app:{baseURL:"/",buildId:"portfolio-contact",buildAssetsDir:"/contact-scene/_nuxt/",cdnURL:""}};
+</script>
+<script type="application/json" data-nuxt-data="nuxt-app" data-ssr="true" id="__NUXT_DATA__">[["ShallowReactive",1],{"data":2,"state":7,"once":9,"_errors":10,"serverRendered":13,"path":14},["ShallowReactive",3],{"projects":4},{"projects":5,"featured":6},[],[],["Reactive",8],{"$sinEditor":11,"$sisLoaded":11,"$sisWaiting":11,"$stheme":15,"$sheaderHeight":12,"$stoasts":16},["Set"],["ShallowReactive",17],false,0,true,"/contact","dark",[],{"projects":-1}]</script>
+<script>
+/* lake mode: the payload says the page is "/contact", and the engine boots on the payload's path, so for the lake it must say "/" */
+if (/[?&]start=lake(&|$)/.test(location.search)) { var __d = document.getElementById('__NUXT_DATA__'); __d.textContent = __d.textContent.replace('"/contact"', '"/"'); }
+</script>
+</body>
+</html>
