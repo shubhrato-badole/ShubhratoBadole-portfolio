@@ -1,0 +1,2 @@
+/* Lenis owns the easing, so the browser's own smooth-scroll must stay off while it is running */
+html.lenis.lenis-smooth { scroll-behavior: auto !important; }
