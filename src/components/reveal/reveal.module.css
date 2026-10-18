@@ -1,0 +1,140 @@
+/* Layout: [ panel (Work) ][ band: room for the overlay ][ next (Contact) ].
+   The lake lives in a fixed iframe BEHIND the page (see Contact.tsx); it is uncovered by lifting the panel. */
+.root {
+  --reveal-pad: clamp(1rem, 3.3vw, 2.625rem); /* = Work's own side padding, so the overlay lines up with the page */
+  position: relative;
+}
+.panel {
+  position: relative;
+}
+.band {
+  height: var(--reveal-d, 0px);
+}
+.next {
+  position: relative;
+  height: 0; /* the Contact page is not part of the scroll until the reveal has opened it */
+  pointer-events: none; /* never swallow clicks / wheel meant for the scene */
+}
+.root[data-phase='open'] .band {
+  height: 0;
+}
+.root[data-phase='open'] .next {
+  height: 100vh;
+  height: 100svh;
+}
+.root[data-phase='open'] .overlay {
+  display: none;
+}
+
+/* "(Just Continue to reveal) / ring / [ next page ] / Contact": fixed to the bottom of the screen, wiped in by the engine */
+.overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  padding: 0.75rem 0 calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  color: #fff;
+  visibility: hidden;
+  pointer-events: none;
+  clip-path: inset(100% 0 0 0);
+}
+.container {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding-inline: var(--reveal-pad);
+  transition: opacity 0.9s ease;
+}
+.fading {
+  opacity: 0;
+}
+
+.top,
+.nextText {
+  font: 500 0.75rem/1.15 var(--font-wk-mono), 'IBM Plex Mono', ui-monospace, monospace;
+  text-transform: uppercase;
+  margin: 0;
+}
+.top {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+@media (min-width: 1025px) {
+  .top {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    column-gap: 1rem;
+  }
+  .top span:nth-child(1) { grid-column: 1 / span 2; }
+  .top span:nth-child(2) { grid-column: 4 / span 1; }
+  .top span:nth-child(3) { grid-column: -6 / auto; }
+  .top span:nth-child(4) { grid-column: span 2 / -1; justify-self: end; }
+}
+@media (max-width: 640px) {
+  .top { justify-content: center; gap: 1ch; }
+}
+
+.ringLink {
+  --ring-fill: rgba(18, 18, 18, 0.1);
+  --ring-track: rgba(255, 255, 255, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 2.5rem;
+  color: inherit;
+  text-decoration: none;
+}
+.nextText {
+  margin-top: 1rem;
+}
+.ring {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 6rem;
+  height: 6rem;
+  border-radius: 50%;
+  background-color: var(--ring-fill);
+}
+.ringSvg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform: rotate(-90deg);
+  z-index: 2;
+}
+.ringTrack {
+  fill: none;
+  stroke: var(--ring-track);
+  stroke-width: 2;
+}
+.ringBar {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.ringIcon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.title {
+  margin: 1.75rem 0 0;
+  font: 400 2.25rem/0.8 var(--font-wk-serif), 'Instrument Serif', 'Times New Roman', serif;
+  text-transform: none;
+}
+@media (min-width: 641px) { .title { font-size: 3.125rem; } }
+@media (min-width: 1025px) { .title { font-size: 4.5rem; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .container { transition: none; }
+}
