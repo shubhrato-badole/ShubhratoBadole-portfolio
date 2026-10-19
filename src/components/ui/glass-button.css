@@ -1,0 +1,43 @@
+/* The original's button system (Let's talk, Filter, the About / Work buttons). Everything is namespaced (.gb / .sr-fglass) so it cannot
+   touch anything else. Values are the reference stylesheet's own. Fonts load from the same /contact-scene/fonts folder as the Contact scene. */
+@font-face { font-family: 'GB PP Neue Montreal'; src: url(/contact-scene/fonts/PPNeueMontreal-Medium.woff2) format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+
+:root {
+  --btn-stroke-angle: 90deg;
+  --btn-stroke-colors: #2d257d 0%, #8e2de2 4%, #f5efff 31%, #f5efff 60%, #cbd5e1 85%, #8e2de2 100%;
+  --btn-stroke: linear-gradient(var(--btn-stroke-angle), var(--btn-stroke-colors));
+}
+
+.gb {
+  position: relative; isolation: isolate; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center; gap: .625rem;
+  width: fit-content; min-width: 7.5rem; border: 1px solid transparent; border-radius: 9999px; padding: 0; margin: 0;
+  color: #fff; font-family: 'GB PP Neue Montreal', 'PP Neue Montreal', system-ui, sans-serif; font-size: .875rem; font-weight: 500; line-height: 1; text-transform: none; text-decoration: none; letter-spacing: normal;
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); background: rgba(18, 18, 18, .1);
+  cursor: pointer; -webkit-appearance: none; appearance: none;
+  transition: background-color .4s cubic-bezier(.16, 1, .3, 1), border-color .4s cubic-bezier(.16, 1, .3, 1), color .4s cubic-bezier(.16, 1, .3, 1), filter .4s cubic-bezier(.16, 1, .3, 1);
+}
+.gb:disabled { cursor: not-allowed; opacity: .5; }
+.gb--sm { height: 2.25rem; padding: .625rem 1rem; }
+.gb--md { height: 3rem; padding: 1rem 2rem; }
+/* the 1px gradient outline (follows the pointer, see glassStroke.ts) */
+.gb::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; z-index: 1;
+  background: var(--btn-stroke);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
+.gb__canvas { position: absolute; inset: 0; z-index: -1; overflow: hidden; border-radius: inherit; pointer-events: none; }
+.gb__canvas canvas { display: block; width: 100%; height: 100%; filter: blur(6px); transform: scale(1.2); pointer-events: none; }
+.gb__shadow { position: absolute; bottom: 0; z-index: -1; width: 100%; height: 50%; border-radius: 9999px; background: #9047ff; filter: blur(20px); opacity: 0; visibility: hidden; transform: scale(.6); pointer-events: none;
+  transition: opacity .4s cubic-bezier(.16, 1, .3, 1), visibility .4s, transform .4s cubic-bezier(.16, 1, .3, 1); }
+.gb:hover .gb__shadow, .gb:focus-visible .gb__shadow { opacity: 1; visibility: visible; transform: scale(1); }
+/* the label rolls up on hover: two copies stacked in a 1em window */
+.gb__label { position: relative; display: flex; flex-direction: column; gap: .1em; height: 1em; overflow: hidden; }
+.gb__label > span { display: block; white-space: nowrap; transition: transform .5s cubic-bezier(.16, 1, .3, 1); }
+.gb:hover .gb__label > span:nth-child(1) { transform: translateY(-120%); }
+.gb:hover .gb__label > span:nth-child(2) { transform: translateY(-110%); }
+.gb__icon { display: inline-flex; flex-shrink: 0; width: 1rem; height: 1rem; }
+.gb__icon svg { width: 1rem; height: 1rem; display: block; }
+.gb:focus-visible { outline: 1px solid #fff; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .gb__label > span { transition: none; } }
