@@ -21,6 +21,7 @@ import {
   type Transport,
 } from './brain';
 import styles from './assistant.module.css';
+import { createFluidSmoke } from '../work/smoke';
 
 type Props = {
   /** Flip to true when the intro hands off; the launcher shows up then. */
@@ -153,6 +154,7 @@ export default function Assistant({
   const orbRef = useRef<OrbHandle>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
+  const smokeRef = useRef<HTMLCanvasElement>(null);
 
   const idRef = useRef(0);
   const openRef = useRef(false);
@@ -202,6 +204,16 @@ export default function Assistant({
     o.setSpeaking(phase === 'speaking' || phase === 'synthesizing');
     o.setMic(phase === 'listening');
   }, [phase, mounted]);
+
+  /* cursor smoke inside the takeover: the same smoke as the Intro and the Work section (../work/smoke.ts).
+     Runs only while the assistant is open, and only with a mouse and motion allowed. */
+  useEffect(() => {
+    if (!open || !finePointer() || reduceMotion()) return;
+    const cv = smokeRef.current;
+    if (!cv) return;
+    const s = createFluidSmoke(cv, { scope: null });
+    return () => s?.destroy();
+  }, [open, mounted]);
 
   /* keep the newest line in view while text streams in */
   useEffect(() => {
@@ -849,6 +861,7 @@ export default function Assistant({
               </div>
             </div>
           </div>
+          <canvas ref={smokeRef} className={styles.smoke} aria-hidden="true" />
           <span className={styles.srOnly}>{last?.role === 'assistant' && last.done ? last.text : ''}</span>
         </div>
       )}
