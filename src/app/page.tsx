@@ -6,6 +6,9 @@ import Intro from '../components/intro/Intro';
 import About from '../components/about/About';
 import Work from '../components/work/Work';
 import Contact from '../components/contact/Contact';
+import NextReveal from '../components/reveal/NextReveal';
+import SmoothScroll from '../components/reveal/SmoothScroll';
+import StackGate from '../components/stack/StackGate';
 
 // useLayoutEffect warns during server rendering; fall back to useEffect there
 const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
@@ -47,9 +50,18 @@ export default function Home() {
         />
       )}
 
-      <About />
-      <Work />
-      <Contact />
+      {/* inertial scrolling (the reference site's feel); starts once the intro is over */}
+      <SmoothScroll enabled={introDone} />
+
+      <StackGate>
+        <About />
+      </StackGate>
+
+      {/* Work lifts away at the end of the page, the lake is uncovered behind it, a ring fills while you keep
+          scrolling, then the Contact page opens (see components/reveal) */}
+      <NextReveal title="Contact" next={<Contact />}>
+        <Work />
+      </NextReveal>
     </>
   );
 }
