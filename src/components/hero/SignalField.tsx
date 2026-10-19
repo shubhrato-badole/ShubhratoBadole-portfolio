@@ -37,6 +37,10 @@ export default function SignalField({ containerRef, accent = '#4C6FFF', onFallba
     let glTried = false;
     const U: Record<string, WebGLUniformLocation | null> = {};
     let running = false;
+    // height of the hero part of the canvas, in canvas pixels. The canvas is
+    // taller than the hero (it bleeds into the next section), and the shader
+    // measures everything against the hero so the hero looks exactly as before.
+    let heroPx = 1;
     let raf = 0;
     const t0 = performance.now();
     let mx = 0.7,
@@ -55,14 +59,15 @@ export default function SignalField({ containerRef, accent = '#4C6FFF', onFallba
       '#else',
       'precision mediump float;',
       '#endif',
-      'uniform vec2 u_res;uniform float u_time;uniform vec2 u_mouse;uniform vec3 u_accent;uniform float u_energy;',
+      'uniform vec2 u_res;uniform float u_time;uniform vec2 u_mouse;uniform vec3 u_accent;uniform float u_energy;uniform float u_hero;',
       'float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}',
       'float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);',
       ' return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}',
       'float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*noise(p);p=p*2.03+vec2(1.7,9.2);a*=.5;}return v;}',
       'void main(){',
-      ' vec2 p=(gl_FragCoord.xy-.5*u_res)/u_res.y;',
-      ' vec2 m=(u_mouse-.5*u_res)/u_res.y;',
+      ' vec2 c=vec2(.5*u_res.x,u_res.y-.5*u_hero);',
+      ' vec2 p=(gl_FragCoord.xy-c)/u_hero;',
+      ' vec2 m=(u_mouse-c)/u_hero;',
       ' float t=u_time*.06;',
       ' vec2 d=p-m;float r=length(d);',
       ' float ripple=sin(r*26.-u_time*2.6)*exp(-r*3.2)*.05*(.25+u_energy);',
@@ -76,8 +81,11 @@ export default function SignalField({ containerRef, accent = '#4C6FFF', onFallba
       ' col+=vec3(.93,.92,.96)*line*(.05+.05*f);',
       ' col+=u_accent*line*glow*(.9+u_energy);',
       ' col+=u_accent*glow*.12;',
-      ' vec2 uv=gl_FragCoord.xy/u_res;',
+      ' col+=u_accent*line*exp(-(p.x*p.x*2.6+(p.y+.5)*(p.y+.5)*9.))*.5;',
+      ' vec2 uv=vec2(gl_FragCoord.x/u_res.x,clamp((gl_FragCoord.y-(u_res.y-u_hero))/u_hero,0.,1.));',
       ' col*=1.-.55*dot(uv-.5,uv-.5)*1.6;',
+      ' float a=uv.y<.34?mix(.55,.3,uv.y/.34):mix(.3,0.,clamp((uv.y-.34)/.3,0.,1.));',
+      ' col=mix(col,vec3(.02,.02,.035),a);',
       ' gl_FragColor=vec4(col,1.);',
       '}',
     ].join('\n');
@@ -139,17 +147,19 @@ export default function SignalField({ containerRef, accent = '#4C6FFF', onFallba
       const loc = gl.getAttribLocation(glProg, 'p');
       gl.enableVertexAttribArray(loc);
       gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-      ['u_res', 'u_time', 'u_mouse', 'u_accent', 'u_energy'].forEach((n) => {
+      ['u_res', 'u_time', 'u_mouse', 'u_accent', 'u_energy', 'u_hero'].forEach((n) => {
         U[n] = gl!.getUniformLocation(glProg!, n);
       });
     }
 
     function size() {
       if (!canvas || !container) return;
-      const r = container.getBoundingClientRect();
-      const k = (r.width < 700 ? 0.55 : 0.75) * Math.min(window.devicePixelRatio || 1, 1.5);
-      canvas.width = Math.max(2, Math.round(r.width * k));
-      canvas.height = Math.max(2, Math.round(r.height * k));
+      const c = canvas.getBoundingClientRect();
+      const h = container.getBoundingClientRect();
+      const k = (c.width < 700 ? 0.55 : 0.75) * Math.min(window.devicePixelRatio || 1, 1.5);
+      canvas.width = Math.max(2, Math.round(c.width * k));
+      canvas.height = Math.max(2, Math.round(c.height * k));
+      heroPx = canvas.height * (h.height / Math.max(1, c.height));
       if (gl) gl.viewport(0, 0, canvas.width, canvas.height);
     }
 
@@ -165,7 +175,8 @@ export default function SignalField({ containerRef, accent = '#4C6FFF', onFallba
       energy *= 0.94;
       gl.uniform2f(U.u_res, canvas.width, canvas.height);
       gl.uniform1f(U.u_time, reduce ? 2 : tt);
-      gl.uniform2f(U.u_mouse, mx * canvas.width, (1 - my) * canvas.height);
+      gl.uniform2f(U.u_mouse, mx * canvas.width, canvas.height - my * heroPx);
+      gl.uniform1f(U.u_hero, heroPx);
       const a = hexRgb(accent);
       gl.uniform3f(U.u_accent, a[0], a[1], a[2]);
       gl.uniform1f(U.u_energy, Math.min(1, energy));
@@ -196,8 +207,9 @@ export default function SignalField({ containerRef, accent = '#4C6FFF', onFallba
     }
 
     function onPointerMove(e: PointerEvent) {
-      if (!canvas) return;
-      const r = canvas.getBoundingClientRect();
+      if (!canvas || !container) return;
+      // measured against the hero (the container), not the taller canvas
+      const r = container.getBoundingClientRect();
       tx = (e.clientX - r.left) / r.width;
       ty = (e.clientY - r.top) / r.height;
       energy = Math.min(1.5, energy + Math.hypot(e.clientX - lastX, e.clientY - lastY) / 60);
@@ -208,6 +220,8 @@ export default function SignalField({ containerRef, accent = '#4C6FFF', onFallba
 
     container.addEventListener('pointermove', onPointerMove);
     window.addEventListener('resize', size);
+    const ro = 'ResizeObserver' in window ? new ResizeObserver(size) : null;
+    ro?.observe(container);
 
     let observer: IntersectionObserver | null = null;
     if ('IntersectionObserver' in window) {
@@ -216,7 +230,8 @@ export default function SignalField({ containerRef, accent = '#4C6FFF', onFallba
         if (entries[0].isIntersecting) startField();
         else stopField();
       });
-      observer.observe(container);
+      // watch the canvas (not the hero) so it keeps drawing while the bleed is on screen
+      observer.observe(canvas);
     } else {
       startField();
     }
@@ -226,6 +241,7 @@ export default function SignalField({ containerRef, accent = '#4C6FFF', onFallba
       container.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('resize', size);
       observer?.disconnect();
+      ro?.disconnect();
     };
   }, [containerRef, accent, active]);
 
