@@ -78,12 +78,39 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
     return { scroll, limit, velocity };
   };
 
+  /* only touch the DOM when a value really changed (the tick runs every frame; identical writes still cost a style check) */
+  const last = new WeakMap<HTMLElement, Record<string, string>>();
+  const put = (el: HTMLElement, prop: 'clipPath' | 'visibility' | 'pointerEvents' | 'willChange', value: string) => {
+    let m = last.get(el);
+    if (!m) last.set(el, (m = {}));
+    if (m[prop] === value) return;
+    m[prop] = value;
+    el.style[prop] = value;
+  };
+
+  /* Once Contact is open nothing here has any more work to do: stop the per-frame tick and every window listener */
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    gsap.ticker.remove(tick);
+    ro.disconnect();
+    window.removeEventListener('resize', measure);
+    window.removeEventListener('wheel', onWheel);
+    window.removeEventListener('touchstart', onTouchStart);
+    window.removeEventListener('touchmove', onTouchMove);
+    window.removeEventListener('wheel', block);
+    window.removeEventListener('touchmove', block);
+  };
+
   const fire = () => {
     if (st.fired || st.opened || st.destroyed) return;
     st.fired = st.latched = true;
     st.n = st.s = threshold;
     st.exp.v = clamp(st.progress) * REVEAL.preview;
     smooth.lenis?.stop();
+    window.addEventListener('wheel', block, { passive: false });
+    window.addEventListener('touchmove', block, { passive: false });
     o.onFire();
     gsap.to(st.exp, {
       v: 1,
@@ -93,6 +120,7 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
         void gsap.delayedCall(REVEAL.startDelay, () => {
           if (st.destroyed) return;
           st.opened = true;
+          release();
           o.onOpen();
         }),
     });
@@ -102,6 +130,7 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
     if (st.opened || st.destroyed) return;
     st.fired = st.latched = st.opened = true;
     st.n = st.s = threshold;
+    release();
     o.onOpen();
   };
 
@@ -114,9 +143,9 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
 
     /* 1. the overlay is wiped in from the bottom while the last stretch of the page scrolls up */
     const g = st.height > 0 ? clamp((H - pr.bottom) / st.height) : 0;
-    overlay.style.clipPath = g >= 1 ? 'none' : `inset(${st.height * (1 - g)}px 0px 0px 0px)`;
-    overlay.style.visibility = g > 0 ? 'visible' : 'hidden';
-    overlay.style.pointerEvents = g > 0.95 ? 'auto' : 'none';
+    put(overlay, 'clipPath', g >= 1 ? 'none' : `inset(${st.height * (1 - g)}px 0px 0px 0px)`);
+    put(overlay, 'visibility', g > 0 ? 'visible' : 'hidden');
+    put(overlay, 'pointerEvents', g > 0.95 ? 'auto' : 'none');
 
     /* 2. extra wheel at the very bottom fills the ring (same maths as the reference's wheel hook) */
     const atEnd = limit > 0 && scroll >= limit * (1 - REVEAL.bottomEps);
@@ -140,8 +169,8 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
     const e = st.fired ? st.exp.v : st.progress * REVEAL.preview;
     const windowTop = lerp(pr.bottom, REVEAL.overshoot * H, e);
     const clip = clamp(pr.bottom - windowTop, 0, pr.height);
-    panel.style.clipPath = clip > 0.5 ? `inset(0px 0px ${clip}px 0px)` : '';
-    panel.style.willChange = clip > 0.5 ? 'clip-path' : '';
+    put(panel, 'clipPath', clip > 0.5 ? `inset(0px 0px ${clip}px 0px)` : '');
+    put(panel, 'willChange', clip > 0.5 ? 'clip-path' : '');
 
     const visible = st.lakeReady && pr.bottom < H;
     if (visible !== st.lakeVisible) {
@@ -160,7 +189,12 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
     st.s = Math.min(threshold, st.s + delta);
     st.lastInput = performance.now();
   };
-  const onWheel = (e: WheelEvent) => add(e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1));
+  const block = (e: Event) => {
+    if (e.cancelable) e.preventDefault(); // the window is opening: the page must not move
+  };
+  const onWheel = (e: WheelEvent) => {
+    add(e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1));
+  };
   let touchY = 0;
   const onTouchStart = (e: TouchEvent) => {
     touchY = e.touches[0]?.clientY ?? 0;
@@ -190,13 +224,8 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
     openNow,
     destroy: () => {
       st.destroyed = true;
-      gsap.ticker.remove(tick);
+      release();
       gsap.killTweensOf(st.exp);
-      ro.disconnect();
-      window.removeEventListener('resize', measure);
-      window.removeEventListener('wheel', onWheel);
-      window.removeEventListener('touchstart', onTouchStart);
-      window.removeEventListener('touchmove', onTouchMove);
       panel.style.clipPath = '';
       panel.style.willChange = '';
       if (smooth.lenis?.isStopped) smooth.lenis.start();
