@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
-import { projects } from '@/components/work/data'
-import ProjectDetail from '@/components/work/ProjectDetail'
+import { projects } from '@/work/data'
+import ProjectDetail from '@/work/ProjectDetail'
 
 type Props = {
   params: Promise<{ slug: string }>
