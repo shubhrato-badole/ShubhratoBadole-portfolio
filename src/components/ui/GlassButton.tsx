@@ -21,20 +21,22 @@ type Props = {
   className?: string;
   ariaLabel?: string;
   dataDir?: string;
+  /** 'purple' = the original's colours (Stack buttons); 'blue' = your hero's cobalt (nav + hero buttons) */
+  tone?: 'purple' | 'blue';
 };
 
 /**
  * "Let's talk"-style button, copied from the original: smoky animated gradient, pointer-following 1px stroke,
  * glow under the button on hover and a label that rolls up. Renders an <a> when `href` is given, a <button> otherwise.
  */
-export default function GlassButton({ label, href, onClick, size = 'sm', icon, className = '', ariaLabel, dataDir }: Props) {
+export default function GlassButton({ label, href, onClick, size = 'sm', icon, className = '', ariaLabel, dataDir, tone = 'purple' }: Props) {
   const root = useRef<HTMLElement | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    const a = registerStroke(root.current), b = startGradient(canvas.current);
+    const a = registerStroke(root.current), b = startGradient(canvas.current, tone);
     return () => { a(); b(); };
-  }, []);
-  const cls = `gb gb--${size}${className ? ' ' + className : ''}`;
+  }, [tone]);
+  const cls = `gb gb--${size}${tone === 'blue' ? ' gb--blue' : ''}${className ? ' ' + className : ''}`;
   const inner = (
     <>
       <span className="gb__canvas" aria-hidden="true"><canvas ref={canvas} /></span>
