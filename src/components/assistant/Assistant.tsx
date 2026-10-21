@@ -21,7 +21,7 @@ import {
   type Transport,
 } from './brain';
 import styles from './assistant.module.css';
-import { createFluidSmoke } from '../work/smoke';
+import { createFluidSmoke } from '../../work/smoke';
 
 type Props = {
   /** Flip to true when the intro hands off; the launcher shows up then. */
