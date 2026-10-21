@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 
-import WorkGlProvider from '../components/work/GlProvider';
+import WorkGlProvider from '../work/GlProvider';
 
 import {
   Instrument_Serif,
