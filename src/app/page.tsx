@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useState } from 'react';
 import Hero from '../components/hero/Hero';
 import Intro from '../components/intro/Intro';
 import About from '../components/about/About';
-import Work from '../components/work/Work';
+import Work from '../work/Work';
 import Contact from '../components/contact/Contact';
 import NextReveal from '../components/reveal/NextReveal';
 import SmoothScroll from '../components/reveal/SmoothScroll';
