@@ -1,2 +1,4 @@
 /* Lenis owns the easing, so the browser's own smooth-scroll must stay off while it is running */
 html.lenis.lenis-smooth { scroll-behavior: auto !important; }
+/* no rubber-banding / scroll chaining into the browser while the page is the one scrolling */
+html.lenis { overscroll-behavior: none; }
