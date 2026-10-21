@@ -1,5 +1,10 @@
 .heroRoot {
   position: relative;
+  --orb-size: 52px;
+  --orb-inset: 24px;
+  --orb-gap: 20px;
+  --hero-pad-b: clamp(28px, 5vh, 56px);
+  --field-bleed: clamp(260px, 38vh, 460px);
 }
 
 .heroRoot::before {
@@ -31,6 +36,8 @@
   text-decoration: none;
   font-weight: 500;
   color: #fff;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1); /* hover used to snap instantly */
 }
 .navName {
   justify-self: start;
@@ -43,8 +50,13 @@
 .navRight {
   justify-self: end;
 }
-.nav a:hover {
-  opacity: 0.6;
+@media (hover: hover) and (pointer: fine) {
+  .nav a:hover {
+    opacity: 0.6;
+  }
+}
+.nav a:active {
+  opacity: 0.45;
 }
 
 /* hero (signal field) */
@@ -54,8 +66,11 @@
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 120px clamp(18px, 4vw, 48px) clamp(28px, 5vh, 56px);
-  overflow: hidden;
+  padding: 120px clamp(18px, 4vw, 48px) var(--hero-pad-b);
+  overflow-x: clip;
+  overflow-y: visible;
+  /* plain ink behind the canvas, so wherever the mask fades the field out you see ink and nothing else */
+  background: var(--ink, #04010f);
 }
 .name {
   font-family: var(--display);
@@ -111,6 +126,8 @@
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  /* lifts the button clear of the fixed orb; follows --orb-* so a resized orb needs no edit here */
+  margin-bottom: max(0px, calc(var(--orb-inset) + var(--orb-size) + var(--orb-gap) - var(--hero-pad-b)));
 }
 
 /* ---------- shared pill/roll button system ---------- */
@@ -236,17 +253,62 @@
      shared value for wherever else it's used */
   --ls: 0.015em;
 }
+/* The canvas is taller than the hero by --field-bleed, so the lines keep
+   flowing down behind the opening paragraph of About. It sits above About's
+   plain-ink background (z-index 1) and below its text (z-index 2).
+   The mask is two layers added together:
+   1. the hero itself, fading out over its last 16vh so the corners dissolve
+   2. a radial lobe centred on the middle of the hero's bottom edge, which
+      keeps the lines alive there and fades them out slowly in every direction,
+      reaching nothing exactly at the bottom of the canvas */
 .field {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  z-index: 1;
   width: 100%;
-  height: 100%;
+  height: calc(100% + var(--field-bleed));
+  pointer-events: none;
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+      #000 0,
+      #000 calc(100% - var(--field-bleed) - 16vh),
+      rgba(0, 0, 0, 0.7) calc(100% - var(--field-bleed) - 9vh),
+      rgba(0, 0, 0, 0.28) calc(100% - var(--field-bleed) - 3.5vh),
+      transparent calc(100% - var(--field-bleed))
+    ),
+    radial-gradient(
+      ellipse 62% var(--field-bleed) at 50% calc(100% - var(--field-bleed)),
+      #000 0,
+      rgba(0, 0, 0, 0.75) 28%,
+      rgba(0, 0, 0, 0.4) 55%,
+      rgba(0, 0, 0, 0.12) 80%,
+      transparent 100%
+    );
+  mask-image:
+    linear-gradient(
+      to bottom,
+      #000 0,
+      #000 calc(100% - var(--field-bleed) - 16vh),
+      rgba(0, 0, 0, 0.7) calc(100% - var(--field-bleed) - 9vh),
+      rgba(0, 0, 0, 0.28) calc(100% - var(--field-bleed) - 3.5vh),
+      transparent calc(100% - var(--field-bleed))
+    ),
+    radial-gradient(
+      ellipse 62% var(--field-bleed) at 50% calc(100% - var(--field-bleed)),
+      #000 0,
+      rgba(0, 0, 0, 0.75) 28%,
+      rgba(0, 0, 0, 0.4) 55%,
+      rgba(0, 0, 0, 0.12) 80%,
+      transparent 100%
+    );
 }
-/* dims the shader specifically where the name/tagline sit, so a bright
-   strand passing behind the text doesn't fight it for attention; fades
-   to nothing toward the rest of the canvas so the shader stays lively
-   everywhere else */
+/* the legibility scrim now lives inside the shader (so it continues into the
+   fade instead of stopping at the hero edge); this CSS copy is only the
+   fallback for browsers without WebGL */
 .legibilityScrim {
+  display: none;
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -260,6 +322,9 @@
 }
 .noGl .field {
   display: none;
+}
+.noGl .legibilityScrim {
+  display: block;
 }
 .noGl {
   background: radial-gradient(60% 60% at 70% 30%, var(--dusk), var(--ink));
@@ -392,4 +457,22 @@
 
 .ring {
   display: none !important;
+}
+
+/* phones: the cta wraps under the tagline on the left, away from the orb, so no lift */
+@media (max-width: 760px) {
+  .cta {
+    margin-bottom: 0;
+  }
+}
+
+
+.navName { display: inline-flex; align-items: center; min-height: 36px; }
+.navLinks { align-items: center; min-height: 36px; }
+.navRight { min-height: 36px; }               
+.navCta {
+  position: fixed;
+  top: calc(18px + env(safe-area-inset-top, 0px));
+  right: clamp(18px, 4vw, 48px);
+  z-index: 21;                                
 }
