@@ -18,7 +18,9 @@
   display: block;
   background: #000;
   z-index: -1;
-  transition: opacity 0.7s ease; /* the live lake fades in over the poster */
+  color-scheme: dark;
+  /* the live lake fades in over the poster (it is never shown before it has reported ready, so no black frame) */
+  transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* the lake as a picture: the window under Work shows it at once, even before the live scene has loaded */
@@ -32,3 +34,24 @@
 
 @media (prefers-reduced-motion: reduce) {
   .frame { transition: none; }}
+
+/* button path: the page fades quickly to dark right where you are; the circle then opens out of it */
+.coverFront {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: #000;
+  pointer-events: none;
+  animation: coverIn 0.25s ease both;
+}
+/* fallback only: if the scene is slow (> ~1.5 s) the lake picture fades in over the dark so it is never a blank wait */
+.posterFront {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: #170d2b url('/contact-scene/lake-poster.jpg') center bottom / cover no-repeat;
+  pointer-events: none;
+  opacity: 0;
+  animation: coverIn 0.6s ease 1.5s both;
+}
+@keyframes coverIn { from { opacity: 0; } to { opacity: 1; } }
