@@ -7,11 +7,33 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Ruthie } from 'next/font/google';
 import styles from './about.module.css';
 
-// Script font for the big word, accent words and step titles.
+// Script font for the big words, accent words and step titles.
 const script = Ruthie({ subsets: ['latin'], weight: '400', variable: '--font-script', display: 'swap' });
 
 // useLayoutEffect warns during server rendering; fall back to useEffect there
 const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+
+/* [start, duration] for each <path> in the lines SVG below, in the same order, in timeline units
+   (one unit is roughly 22vh of scroll). The lines start together from the middle AND the right side,
+   the left follows a beat later, and the box closes last. */
+const LINE_TIMING: [number, number][] = [
+  [0, 6.6], [0, 6.6], // horizontal axis, out from the middle both ways
+  [0.9, 6.6], [0.9, 6.6], // vertical axis, out from the middle both ways
+  [1.8, 6], [1.8, 6], [2.4, 6], [2.4, 6], // diagonals from the middle
+  [1.5, 6.6], [1.5, 6.6], [2.7, 6.6], [2.7, 6.6], // diagonals from the right side
+  [3, 6.6], [3, 6.6], [3.9, 6.6], [3.9, 6.6], // diagonals from the left side
+  [5.4, 9], [5.4, 9], // the box, out from the middle of its right edge, closing on the left
+];
+
+/* the lines start once Build has grown to full size (timeline units), keeping exactly the same drawing speed */
+const LINE_START = 2.4;
+
+/* How closely the scene follows the scrollbar. Lenis already smooths the scroll itself, so a big value here stacks a second delay on top
+   (that is the "lag"): 1 trailed by about a second, 0.4 is still soft but keeps up. Raise it if you want it floatier. */
+const SCRUB = 0.2;
+
+/* Set to true ONLY after you have run `node scripts/tint-falling.mjs` (it creates public/about/falling-blue.webp). false = the original GIF + CSS recolour. */
+const BAKED_TINT = false;
 
 export default function About() {
   const rootRef = useRef<HTMLElement>(null);
@@ -43,63 +65,109 @@ export default function About() {
         });
       });
 
-      /* 1 — statement: words land in random order, and go back out on scroll up */
+      /* 1 — statement: words land in random order, and go back out on scroll up.
+             (No blur on the words any more: animating a blur filter on ~45 separate words is very expensive. Opacity + movement look the same.) */
       const statement = one('[data-statement]');
       if (statement) {
         const words = all('[data-statement] [data-w]');
-        gsap.set(words, { opacity: 0, y: 50, filter: 'blur(2px)' });
+        gsap.set(words, { opacity: 0, y: 50 });
         gsap.to(words, {
-          opacity: 1, y: 0, filter: 'blur(0px)', duration: 2.4, ease: 'power4.out',
+          opacity: 1, y: 0, duration: 2.4, ease: 'power4.out',
           stagger: { each: 0.04, from: 'random' },
           scrollTrigger: { trigger: statement, start: 'top 85%', toggleActions: 'play none none reverse' },
         });
       }
 
-      /* 2 — word + sentence appear, word glides to centre while lines draw,
-             then the falling-man card rises from below and grows (all scrubbed, so it reverses) */
+      /* 2 — one pinned scene. Build is on screen from the start, a little smaller; as you scroll it comes up and grows to full
+             size, then the lines draw themselves from the middle and the right side while the three words (Build, Break,
+             Trust) take turns in the centre. Each word has a few lines of text on the right. Then the falling-man card
+             rises and grows. Everything is one scrubbed timeline of explicit from/to values, so it plays the same
+             forwards and backwards. Nothing is clipped, and the outgoing word is almost gone before the next one arrives. */
       const fall = one('[data-fall]');
       const card = one('[data-fall-card]');
       const tear = one('[data-fall-tear]');
-      const word = one('[data-word]');
-      const copy = one('[data-scene-copy]');
+      const words = all('[data-word-in]');
+      const sideLists = all('[data-details]');
       const lineEls = all('[data-lines] path') as unknown as SVGPathElement[];
       const textLines = all('[data-fall-line]');
-      if (fall && card && tear && word && copy) {
-        const copyWords = all('[data-w]', copy);
-        gsap.set(word, { opacity: 0, filter: 'blur(8px)' });
-        gsap.set(copyWords, { opacity: 0, y: 30 });
+      if (fall && card && tear && words.length === 3 && sideLists.length === 3 && lineEls.length === LINE_TIMING.length) {
+        const sideLines = sideLists.map((ul) => all('li', ul));
+
+        // starting states: Build is visible (a little smaller and lower), the other words and all side text wait
+        gsap.set(words[0], { opacity: 1, scale: 0.74, yPercent: 10 });
+        gsap.set([words[1], words[2]], { opacity: 0, scale: 0.86, yPercent: 12 });
+        sideLines.forEach((lis) => gsap.set(lis, { opacity: 0, yPercent: 40 }));
+        // The soft glow along the lines used to be a CSS `filter: drop-shadow` on the whole full-screen SVG, re-computed on every scroll frame
+        // while 18 strokes redraw. Now each line gets a wider, fainter copy of itself underneath (same path, same animation): the same soft
+        // look with no filter at all.
+        const glows = lineEls.map((p) => {
+          const g = p.cloneNode(true) as SVGPathElement;
+          g.setAttribute('data-glow', '');
+          p.parentNode?.insertBefore(g, p);
+          return g;
+        });
+        undo.push(() => glows.forEach((g) => g.remove()));
         // measure each stroke once (user units, so it stays valid at any viewport size) and hide it by offsetting its dash
-        lineEls.forEach((p) => {
+        const lens = lineEls.map((p, k) => {
           const len = p.getTotalLength();
-          gsap.set(p, { strokeDasharray: len, strokeDashoffset: len });
+          gsap.set([p, glows[k]], { strokeDasharray: len, strokeDashoffset: len });
+          return len;
         });
         gsap.set(card, { yPercent: 100, scale: 0.3 });
         gsap.set(tear, { scale: 1.9 });
         gsap.set(textLines, { yPercent: 120 });
 
-        gsap
-          .timeline({ scrollTrigger: { trigger: fall, start: 'top 65%', toggleActions: 'play none none reverse' } })
-          .to(word, { opacity: 1, filter: 'blur(0px)', duration: 1.2, ease: 'power3.out' })
-          .to(copyWords, { opacity: 1, y: 0, stagger: 0.03, duration: 0.7, ease: 'power3.out' }, 0.2);
-
-        // Pen order: the middle axis first, then the diagonals fanning out from it, the box last. Each stroke takes 3.2 units
-        // and starts 0.75 after the previous one, so a few strokes are always growing at once (continuous, never a pause).
-        // Linear easing ties the pen directly to scroll, and the whole figure is only complete at the end of the drawing
-        // stretch. One timeline unit is roughly 22vh of scroll.
-        const ORDER = [0, 13, 1, 10, 11, 12, 2, 3, 6, 7, 4, 5, 8, 9, 14];
+        // 1 unit of this timeline is roughly 22vh of scroll
         const tl = gsap.timeline({
           defaults: { ease: 'none' },
-          scrollTrigger: { trigger: fall, start: 'top top', end: '+=600%', scrub: 1, pin: true, anticipatePin: 1, invalidateOnRefresh: true },
+          scrollTrigger: { trigger: fall, start: 'top top', end: '+=735%', scrub: SCRUB, pin: true, anticipatePin: 1, invalidateOnRefresh: true },
         });
-        ORDER.forEach((li, k) => {
-          tl.to(lineEls[li], { strokeDashoffset: 0, duration: 3.2 }, k * 0.75);
+
+        // a word comes up and grows into place; later it lifts a little and fades out (fast, so the next word never sits on top of it)
+        const enter = (t: gsap.TweenTarget, at: number) =>
+          tl.fromTo(t, { opacity: 0, yPercent: 12, scale: 0.86 }, { opacity: 1, yPercent: 0, scale: 1, duration: 2.6, ease: 'power3.out', immediateRender: false }, at);
+        const exit = (t: gsap.TweenTarget, at: number) =>
+          tl.fromTo(t, { opacity: 1, yPercent: 0, scale: 1 }, { opacity: 0, yPercent: -10, scale: 1.05, duration: 1.6, ease: 'power2.out', immediateRender: false }, at);
+        // the lines of text on the right come up one after another, and leave together with their word
+        const showSide = (t: gsap.TweenTarget, at: number) =>
+          tl.fromTo(t, { opacity: 0, yPercent: 40 }, { opacity: 1, yPercent: 0, duration: 1.2, stagger: 0.35, ease: 'power2.out', immediateRender: false }, at);
+        const hideSide = (t: gsap.TweenTarget, at: number) =>
+          tl.fromTo(t, { opacity: 1, yPercent: 0 }, { opacity: 0, yPercent: -30, duration: 0.9, stagger: 0.08, ease: 'power2.in', immediateRender: false }, at);
+
+        // lines: same speed as before, they just begin once Build has grown
+        lineEls.forEach((p, k) => {
+          tl.fromTo(
+            [p, glows[k]],
+            { strokeDashoffset: lens[k] },
+            { strokeDashoffset: 0, duration: LINE_TIMING[k][1], ease: 'power2.inOut', immediateRender: false },
+            LINE_START + LINE_TIMING[k][0]
+          );
         });
-        tl.fromTo(word, { scale: 0.8 }, { scale: 1, duration: 13.7 }, 0)
-          .to(copy, { opacity: 0, y: -40, duration: 3 }, 4)
-          .to(card, { yPercent: 0, duration: 4 }, 15.2) // short pause first, so the finished figure is seen
-          .to(card, { scale: 1, duration: 4.4 })
-          .to(tear, { scale: 1, duration: 3 }, '<0.9')
-          .to(textLines, { yPercent: 0, duration: 2.4, stagger: 0.22, ease: 'power3.out' }, '>-0.4')
+
+        // Build comes up and grows. Its sentence on the right starts coming up just before the lines start drawing.
+        tl.fromTo(words[0], { scale: 0.74, yPercent: 10 }, { scale: 1, yPercent: 0, duration: 2.6, ease: 'power3.out', immediateRender: false }, 0);
+        showSide(sideLines[0], LINE_START - 0.5);
+
+        // Build hands over to Break
+        exit(words[0], 6);
+        hideSide(sideLines[0], 6);
+        enter(words[1], 7);
+        showSide(sideLines[1], 8.4);
+
+        // Break hands over to Trust, which is fully in about when the lines finish drawing
+        exit(words[1], 13);
+        hideSide(sideLines[1], 13);
+        enter(words[2], 14);
+        showSide(sideLines[2], 15.4);
+
+        // Trust leaves soon after its text, and the card (unchanged) rises and grows
+        exit(words[2], 19.6);
+        hideSide(sideLines[2], 19.6);
+
+        tl.fromTo(card, { yPercent: 100 }, { yPercent: 0, duration: 4, immediateRender: false }, 20.8)
+          .fromTo(card, { scale: 0.3 }, { scale: 1, duration: 4.4, immediateRender: false })
+          .fromTo(tear, { scale: 1.9 }, { scale: 1, duration: 3, immediateRender: false }, '<0.9')
+          .fromTo(textLines, { yPercent: 120 }, { yPercent: 0, duration: 2.4, stagger: 0.22, ease: 'power3.out', immediateRender: false }, '>-0.4')
           .to({}, { duration: 2 });
       }
 
@@ -152,26 +220,55 @@ export default function About() {
 
   <div className={styles.fall} data-fall>
     <svg className={styles.lines} data-lines viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <path d="M-57 540.3L1986 540.3" />
+      <path d="M960 540.3L-57 540.3" />
+      <path d="M960 540.3L1986 540.3" />
+      <path d="M959.3 540L959.3 -126" />
+      <path d="M959.3 540L959.3 1207.1" />
       <path d="M959.8 540.2L264.8 -153.8" />
-      <path d="M564.8 540.2L-152.5 -128.8" />
-      <path d="M565.2 541.2L-152.2 1210.2" />
-      <path d="M370.6 540L1088 -129" />
-      <path d="M371.2 540.8L1090.2 1206.8" />
+      <path d="M959.8 539.8L1654.2 -154.2" />
+      <path d="M959.6 539.6L1653.3 1233.3" />
+      <path d="M959.5 540L406.6 1092.1" />
       <path d="M1544.8 540.2L827.5 -128.8" />
       <path d="M1545.2 541.2L827.8 1210.2" />
       <path d="M1356.7 540L2074 -129" />
       <path d="M1356.6 541L2074 1210" />
-      <path d="M959.8 539.8L1654.2 -154.2" />
-      <path d="M959.6 539.6L1653.3 1233.3" />
-      <path d="M959.5 540L406.6 1092.1" />
-      <path d="M959.3 1207.1L959.3 -126" />
-      <path d="M1356.75 933.75H565.25V145.75L1356.75 143.25V933.75Z" />
+      <path d="M564.8 540.2L-152.5 -128.8" />
+      <path d="M565.2 541.2L-152.2 1210.2" />
+      <path d="M370.6 540L1088 -129" />
+      <path d="M371.2 540.8L1090.2 1206.8" />
+      <path d="M1356.75 538.75V143.25L565.25 145.75V538.75" />
+      <path d="M1356.75 538.75V933.75H565.25V538.75" />
     </svg>
-    <div className={styles.bigWord} data-word><span className={styles.script}>Systems</span></div>
-    <p className={styles.sceneCopy} data-scene-copy data-split>Models get the attention. Engineering makes them dependable. I combine both to build AI that holds up in production.</p>
+
+    <div className={styles.beat}>
+      <div className={styles.bigWord}><span className={styles.script} data-word-in>Build</span></div>
+      <ul className={styles.details} data-details>
+        <li>Models get the attention.</li>
+        <li>Engineering makes them dependable.</li>
+        <li>I combine both to build AI that holds up in production.</li>
+      </ul>
+    </div>
+    <div className={styles.beat}>
+      <div className={styles.bigWord}><span className={styles.script} data-word-in>Break</span></div>
+      <ul className={styles.details} data-details>
+        <li>Fail loudly, never silently</li>
+        <li>Security-minded by training</li>
+        <li>Tested before it ships</li>
+        <li>Edge cases hunted early</li>
+      </ul>
+    </div>
+    <div className={styles.beat}>
+      <div className={styles.bigWord}><span className={styles.script} data-word-in>Trust</span></div>
+      <ul className={styles.details} data-details>
+        <li>Redis cache: 4s to 5ms</li>
+        <li>CI/CD on AWS EC2</li>
+        <li>CloudWatch alarms</li>
+        <li>AES-256 encrypted storage</li>
+      </ul>
+    </div>
+
     <div className={styles.card} data-fall-card>
-      <img className={`${styles.media} ${styles.tint}`} src="/about/falling.gif" alt="" />
+      <img className={BAKED_TINT ? styles.media : `${styles.media} ${styles.tint}`} src={BAKED_TINT ? '/about/falling-blue.webp' : '/about/falling.gif'} alt="" />
       <div className={styles.tear} data-fall-tear><img src="/about/paper-tear.png" alt="" /></div>
       <div className={styles.fallCopy}>
         <h2 className={styles.fallHeading}>
