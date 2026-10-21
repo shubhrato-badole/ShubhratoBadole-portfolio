@@ -11,6 +11,7 @@ const WAVES: Wave[] = [
   { amplitude: 0.18, frequency: 1.7, speed: 0.9, phase: 5.5, color: [200, 160, 255], opacity: 0.25, yOffset: 0.45, direction: -1 },
 ];
 
+const BLUE: [number, number, number][] = [[76, 111, 255], [60, 90, 235], [32, 48, 170], [140, 165, 255], [90, 120, 255], [170, 190, 255]];   // the hero's cobalt family
 const waveY = (x: number, w: Wave, t: number, h: number) => {
   const a = Math.sin(t * w.speed * 1.008 + w.phase) * 3, b = Math.cos(t * w.speed * 0.72 + w.phase + 1.5) * 2.5, c = Math.sin(t * w.speed * 1.296 + w.phase + 3) * 2;
   const A = w.amplitude * (1 + Math.sin(t * w.speed * 0.576 + w.phase + 0.7) * 0.3), drift = Math.sin(t * w.speed * 0.432 + w.phase + 2) * h * 0.08;
@@ -31,12 +32,13 @@ function drawWave(ctx: CanvasRenderingContext2D, w: Wave, t: number, W: number, 
   ctx.fillStyle = grad; ctx.fill();
 }
 
-export function startGradient(canvas: HTMLCanvasElement | null): () => void {
+export function startGradient(canvas: HTMLCanvasElement | null, tone: 'purple' | 'blue' = 'purple'): () => void {
   if (!canvas || typeof window === 'undefined') return () => {};
   const ctx = canvas.getContext('2d'); const parent = canvas.parentElement; if (!ctx || !parent) return () => {};
-  let W = 0, H = 0, raf = 0, on = false; const t0 = performance.now();
-  const size = () => { const dpr = Math.min(window.devicePixelRatio || 1, 2); W = parent.clientWidth; H = parent.clientHeight; canvas.width = Math.max(1, Math.round(W * dpr)); canvas.height = Math.max(1, Math.round(H * dpr)); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
-  const frame = (now: number) => { raf = requestAnimationFrame(frame); if (!W || !H) return; const t = (now - t0) / 1000; ctx.clearRect(0, 0, W, H); for (const w of WAVES) drawWave(ctx, w, t, W, H); };
+  const waves = tone === 'blue' ? WAVES.map((w, i) => ({ ...w, color: BLUE[i] })) : WAVES;
+  let W = 0, H = 0, raf = 0, on = false, lastDraw = 0; const t0 = performance.now();
+  const size = () => { const dpr = 1; /* blurred by 6px anyway: 1x looks identical */ W = parent.clientWidth; H = parent.clientHeight; canvas.width = Math.max(1, Math.round(W * dpr)); canvas.height = Math.max(1, Math.round(H * dpr)); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+  const frame = (now: number) => { raf = requestAnimationFrame(frame); if (!W || !H || document.hidden || now - lastDraw < 33) return; lastDraw = now; const t = (now - t0) / 1000; ctx.clearRect(0, 0, W, H); for (const w of waves) drawWave(ctx, w, t, W, H); };   // 30 fps is plenty for a slow haze
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const ro = new ResizeObserver(() => { size(); if (reduce) frame(performance.now()); }); ro.observe(parent); size();
   const io = new IntersectionObserver(([e]) => { const vis = !!e?.isIntersecting; if (vis && !on && !reduce) { on = true; raf = requestAnimationFrame(frame); } else if (!vis && on) { on = false; cancelAnimationFrame(raf); } });
