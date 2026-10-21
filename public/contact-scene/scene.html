@@ -2,8 +2,8 @@
 <html lang="en" translate="no" data-theme="dark">
 <head>
 <!-- ===== portfolio embed layer (added; everything below is ours, not part of the original build) ===== -->
-<meta name="scene-build" content="v4">
-<script type="importmap">{ "imports": { "/contact-scene/_nuxt/DL4QAMwX.js": "/contact-scene/_nuxt/DL4QAMwX.v4.js" } }</script>
+<meta name="scene-build" content="v5">
+<script type="importmap">{ "imports": { "/contact-scene/_nuxt/DL4QAMwX.js": "/contact-scene/_nuxt/DL4QAMwX.v5.js" } }</script>
 <style>
   /* the portfolio has its own nav, so the original top bar is hidden */
   header.header, nav.mobile-nav { display: none !important; } /* + the small-screen menu pill */
@@ -21,13 +21,43 @@
   .ai-btn, .ai-bubble, .ai-overlay { display: none !important; }
   /* LAKE MODE (?start=lake): only the 3D lake is shown (no page text / UI) until the portfolio opens the contact page */
   html.lake-mode .ui { visibility: hidden !important; }
+  /* ===== BLUE accent (the hero's cobalt #4C6FFF, same family as the "Let's talk" button) =====
+     --primary drives: the title arrow, the "Send it" glow, focus colour, caret, selection, list numbers.
+     To go back to purple, delete this one block. (The 3D tree / lake keep their own purple art direction.) */
+  .contact-window {
+    --primary: #4c6fff; --primary-rgb: 76, 111, 255;
+    --primary-active: #3a57e8; --primary-active-rgb: 58, 87, 232;
+    /* the button's 1px outline gradient: identical to the hero's .gb--blue */
+    --btn-stroke-colors: #1b2a8f 0%, #4c6fff 4%, #e8eeff 31%, #e8eeff 60%, #b9c6ff 85%, #4c6fff 100%;
+  }
+  .contact-window .c-hero__title-sub-3-icon { color: #4c6fff; }
+  /* "Send it": same body tint, same glow and same smoky wave colours as the blue "Let's talk" button */
+  .contact-window .button.button--primary { background-color: rgba(76, 111, 255, .07); }
+  .contact-window .button.button--primary .button__gradient { filter: blur(6px) hue-rotate(-34deg) saturate(1.08); } /* purple waves -> cobalt waves */
+  /* tactile press, like the hero's buttons */
+  .contact-window .button:not(:disabled):active { transform: scale(.965); transition-duration: .12s; }
+  .contact-window .button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   /* "What I can do" is a plain list now (nothing to choose) */
   .radio-item-wrapper { cursor: default !important; }
   .radio-item-wrapper:hover { color: var(--foreground) !important; }
 </style>
 <script>
+/* PERFORMANCE: inside the portfolio this scene shares ONE main thread with the page, and it was rendering at the full Retina
+   pixel ratio (2x = ~5.4 MP on a MacBook). Capping the ratio the scene sees at 1.5 cuts the pixels it has to draw by ~44% with
+   no visible difference on this soft, bloomy night scene. Change SCENE_MAX_DPR to taste (2 = the old behaviour).
+   Only applies when embedded; the DOM text / form stay perfectly crisp (CSS pixels are not affected). */
 (function () {
-  try { console.info('[contact-scene] build v4'); } catch (e) {}
+  var SCENE_MAX_DPR = 1.5;
+  try {
+    if (window.parent !== window && (window.devicePixelRatio || 1) > SCENE_MAX_DPR) {
+      Object.defineProperty(window, 'devicePixelRatio', { configurable: true, get: function () { return SCENE_MAX_DPR; } });
+    }
+  } catch (e) {}
+})();
+</script>
+<script>
+(function () {
+  try { console.info('[contact-scene] build v5'); } catch (e) {}
   /* the scene reads its light / dark theme from a cookie (default: light = white). Dark = the original's dark loader. */
   try { if (!/(?:^|; )theme=dark\b/.test(document.cookie)) document.cookie = 'theme=dark; path=/; max-age=31536000; SameSite=Lax'; } catch (e) {}
 
@@ -103,7 +133,11 @@
   var allowed = !host || LAKE;              /* opened on its own page: enter at once. The lake opens by itself (it is hidden behind the page). */
   var lakeSetUp = !LAKE;                    /* lake mode waits until its patches are installed */
   var gate = new MutationObserver(tryEnter);
+  var formReadySent = false;
   function tryEnter() {
+    /* form page opened by the portfolio's Contact button (?wait=1): tell the page the moment the scene is booted and
+       waiting, so the page can start the opening ring only when it will play smoothly (never on a half-loaded scene) */
+    if (WAIT && !formReadySent && document.querySelector('.loader--ready')) { formReadySent = true; send({ type: 'form-ready' }); }
     if (!allowed || !lakeSetUp || !document.querySelector('.loader--ready')) return;
     var btns = document.querySelectorAll('.loader__actions button');
     for (var i = 0; i < btns.length; i++) {
@@ -169,6 +203,13 @@
     for (var k = 0; k < 900 && !world.manager.state.introPlayed; k++) await sleep(200);
     await sleep(400);
     send({ type: 'lake-ready' });
+    warmUp();
+  }
+  /* The contact page waits for every font (up to 3 s) before it starts its entrance, and its code is only imported when the
+     route changes. Doing both NOW, while the lake sits hidden behind Work, removes that wait from the moment that matters. */
+  function warmUp() {
+    try { Array.prototype.forEach.call(document.fonts, function (f) { f.load().catch(function () {}); }); } catch (e) {}
+    try { import('/contact-scene/_nuxt/DL4QAMwX.js').catch(function () {}); } catch (e) {}   /* mapped to the v5 file by the import map */
   }
   if (LAKE) setUpLake();
 
@@ -254,8 +295,9 @@
 <link rel="preload" as="font" crossorigin href="/contact-scene/fonts/PPNeueMontreal-Medium.woff2">
 <link rel="preload" as="font" crossorigin href="/contact-scene/fonts/IBMPlexMono-Medium-Latin1.woff2">
 <link rel="preload" as="font" crossorigin href="/contact-scene/fonts/EmotionSerif-Light.woff2">
+<link rel="preload" as="font" crossorigin href="/contact-scene/fonts/EmotionSerif-LightItalic.woff2">
 <link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/BZDeO1lC.js">
-<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/DL4QAMwX.v4.js">
+<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/DL4QAMwX.v5.js">
 <link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/BGBHjvBH.js">
 <link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/CV6D6F_8.js">
 <link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/D33KF0pv.js">
