@@ -4,18 +4,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import gsap from 'gsap';
 import SignalField from './SignalField';
 import Assistant from '../assistant/Assistant';
+import GlassButton from '../ui/GlassButton';
+import { scrollToTarget } from '../reveal/smooth';
 import styles from './hero.module.css';
 
 const NAME = 'Shubhrato';
 const GLYPHS = '$?-/~*#&%^<>[]{}01';
-
-function ArrowIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M4 12L12 4M12 4H6M12 4V10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 // useLayoutEffect warns during server rendering; fall back to useEffect there
 const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
@@ -89,7 +83,6 @@ type HeroProps = {
 export default function Hero({ ready = true }: HeroProps) {
   const heroRef = useRef<HTMLElement>(null);
   const pitchRef = useRef<HTMLParagraphElement>(null);
-  const btnRefs = useRef<(HTMLAnchorElement | null)[]>([]);
   const charRefs = useRef<(HTMLSpanElement | null)[]>([]);
 
   const [noGl, setNoGl] = useState(false);
@@ -109,7 +102,8 @@ export default function Hero({ ready = true }: HeroProps) {
 
     const cancelScramble = pitchRef.current ? scramblePitch(pitchRef.current, 900) : null;
 
-    gsap.from(`.${styles.nav}`, { y: -30, opacity: 0, duration: 0.8, delay: 0.5, ease: 'power3.out' });
+    // the name + links (blended) and the "Let's talk" button (not blended) come in together
+    gsap.from([`.${styles.nav}`, `.${styles.navCta}`], { y: -30, opacity: 0, duration: 0.8, delay: 0.5, ease: 'power3.out' });
 
     return () => {
       tl.kill();
@@ -122,12 +116,19 @@ export default function Hero({ ready = true }: HeroProps) {
     const target = document.getElementById(href.slice(1));
     if (!target) return; // section doesn't exist on the page yet
     e.preventDefault();
-    target.scrollIntoView({ behavior: prefersReduce() ? 'auto' : 'smooth' });
+    if (href === '#contact') {
+      // the reveal (NextReveal) owns this one: it intercepts scrollIntoView on #contact and glides there
+      target.scrollIntoView({ behavior: prefersReduce() ? 'auto' : 'smooth' });
+      return;
+    }
+    // same easing and duration logic as every other scroll on the page (the browser's own smooth-scroll fought Lenis)
+    scrollToTarget(href === '#top' ? 0 : target, { immediate: prefersReduce() });
   }
 
   return (
     <div className={styles.heroRoot}>
 
+      {/* name + links: blended with the page (mix-blend-mode: difference), as before */}
       <header className={styles.nav}>
         <a className={styles.navName} href="#top" onClick={(e) => handleAnchor(e, '#top')}>
           Shubhrato
@@ -143,19 +144,19 @@ export default function Hero({ ready = true }: HeroProps) {
             Work
           </a>
         </nav>
-        <div className={styles.navRight}>
-          <a
-            className={`${styles.btn} ${styles.navBtn}`}
-            href="#contact"
-            onClick={(e) => handleAnchor(e, '#contact')}
-          >
-            <span className={styles.roll}>
-              <span className={styles.l1}>Contact</span>
-              <span className={styles.l2}>Contact</span>
-            </span>
-          </a>
-        </div>
+        <div className={styles.navRight} aria-hidden="true" />
       </header>
+
+      {/* "Let's talk" (was "Contact"): the original's glass button. It sits outside the blended header so its purple is not inverted. */}
+      <div className={styles.navCta}>
+        <GlassButton
+          href="#contact"
+          label="Let's talk"
+          size="sm"
+          tone="blue"
+          onClick={(e) => handleAnchor(e as React.MouseEvent<HTMLAnchorElement>, '#contact')}
+        />
+      </div>
 
       <main id="top">
         <section ref={heroRef} id="hero" className={`${styles.hero} ${noGl ? styles.noGl : ''}`}>
@@ -182,23 +183,13 @@ export default function Hero({ ready = true }: HeroProps) {
               AI engineer. I build full-stack systems and think about how they break.
             </p>
             <div className={styles.cta}>
-              <a
-                ref={(el) => {
-                  btnRefs.current[0] = el;
-                }}
-                className={`${styles.btn} ${styles.primary}`}
+              <GlassButton
                 href="#work"
-                onClick={(e) => handleAnchor(e, '#work')}
-              >
-                <span className={styles.roll}>
-                  <span className={styles.l1}>See the work</span>
-                  <span className={styles.l2}>See the work</span>
-                </span>
-                <span className={`${styles.roll} ${styles.arrow}`}>
-                  <span className={styles.l1}><ArrowIcon /></span>
-                  <span className={styles.l2}><ArrowIcon /></span>
-                </span>
-              </a>
+                label="See the work"
+                size="md"
+                tone="blue"
+                onClick={(e) => handleAnchor(e as React.MouseEvent<HTMLAnchorElement>, '#work')}
+              />
             </div>
           </div>
         </section>
