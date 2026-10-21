@@ -23,20 +23,24 @@ export type RevealPhase = 'reveal' | 'opening' | 'open';
 
 type RevealState = {
   phase: RevealPhase; // reveal: scrolling / filling the ring · opening: the window is opening · open: the next page is up
-  direct: boolean; // opened with a Contact button / link (not by scrolling): the scene plays its own opening animation
+  directRun: number; // how many times a Contact button opened the page in place (1, 2, ...)
+  direct: boolean; // opened with a Contact button / link (not by scrolling): the scene plays its own circle opening
   lakeReady: boolean; // the lake iframe finished booting
   lakeVisible: boolean; // part of the lake is on screen right now
   lakeNear: boolean; // the lake is about to be needed: run it at full speed
   setLakeReady: (ready: boolean) => void;
+  jumpToNext: () => void; // move the page position to the contact page instantly (used while the screen is covered)
 };
 
 const RevealContext = createContext<RevealState>({
   phase: 'reveal',
+  directRun: 0,
   direct: false,
   lakeReady: false,
   lakeVisible: false,
   lakeNear: false,
   setLakeReady: () => {},
+  jumpToNext: () => {},
 });
 export const useReveal = () => useContext(RevealContext);
 
@@ -66,6 +70,7 @@ export default function NextReveal({ children, next, title = 'Contact' }: Props)
   const [lakeVisible, setLakeVisible] = useState(false);
   const [lakeNear, setLakeNear] = useState(false);
   const [direct, setDirect] = useState(false);
+  const [directRun, setDirectRun] = useState(0);
   const directRef = useRef(false);
   const phaseRef = useRef<RevealPhase>('reveal');
   useEffect(() => {
@@ -118,26 +123,32 @@ export default function NextReveal({ children, next, title = 'Contact' }: Props)
 
   // Two ways into the Contact page:
   //  · SCROLL: the reveal (lake window, ring, expansion), see revealEngine.ts
-  //  · A CONTACT BUTTON / LINK (#contact, scrollIntoView on #contact, or the 'portfolio:open-contact' event): no reveal;
-  //    the page scrolls down to Contact and the scene plays its own opening animation (the circle opening from the middle).
+  //  · A CONTACT BUTTON / LINK (#contact, scrollIntoView on #contact, or the 'portfolio:open-contact' event): no ring;
+  //    the page glides down to Contact and the scene plays its own opening animation (the circle opening from the
+  //    middle). That scene is pre-warmed in the background (see Contact.tsx), so it starts the moment you arrive.
   useEffect(() => {
-    const scrollToNext = () => {
-      const el = nextRef.current;
-      if (!el) return;
-      const y = el.getBoundingClientRect().top + window.scrollY;
-      if (smooth.lenis) smooth.lenis.scrollTo(y, { duration: 1.4 });
-      else window.scrollTo({ top: y, behavior: 'smooth' });
-    };
+    // One click can reach this twice (our click listener AND the button's own scrollIntoView): ignore the repeat
+    let lastGo = 0;
     const goDirect = () => {
+      const now = performance.now();
+      if (now - lastGo < 800) return;
+      lastGo = now;
       const ph = phaseRef.current;
       if (ph === 'opening') return;
       if (ph === 'open') {
-        scrollToNext();
+        const el = nextRef.current;
+        if (el && el.getBoundingClientRect().top < window.innerHeight * 0.5) return; // Contact is already on screen
+        // Contact was opened before (by scrolling or by a button): open it IN PLACE again (cover + circle), no scrolling
+        directRef.current = true;
+        setDirect(true);
+        setDirectRun((n) => n + 1);
         return;
       }
+      if (directRef.current) return; // already on its way
       directRef.current = true;
       setDirect(true);
-      engineRef.current?.openNow(); // → phase 'open'; the layout effect below does the scrolling
+      setDirectRun((n) => n + 1);
+      engineRef.current?.openNow(); // → phase 'open'; no scrolling: Contact covers the screen where you are
     };
     const onClick = (e: MouseEvent) => {
       const a = (e.target as Element | null)?.closest?.('a[href]');
@@ -153,8 +164,8 @@ export default function NextReveal({ children, next, title = 'Contact' }: Props)
     };
     const originalScrollIntoView = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = function (this: Element, ...args: Parameters<Element['scrollIntoView']>) {
-      if (this.id === 'contact' && phaseRef.current !== 'open') {
-        goDirect();
+      if (this.id === 'contact') {
+        goDirect(); // never let the browser scroll there itself
         return;
       }
       return originalScrollIntoView.apply(this, args);
@@ -186,17 +197,24 @@ export default function NextReveal({ children, next, title = 'Contact' }: Props)
     lenis?.resize();
     const y = nextEl.getBoundingClientRect().top + window.scrollY;
     if (directRef.current) {
-      // a Contact button: scroll down to it
-      if (lenis) lenis.scrollTo(y, { duration: 1.4 });
-      else window.scrollTo({ top: y, behavior: 'smooth' });
+      // a Contact button: NO scroll here. The contact scene covers the screen where you are and plays its circle opening;
+      // Contact.tsx calls jumpToNext() once the screen is covered, so the page position changes unseen.
     } else if (lenis) lenis.scrollTo(y, { immediate: true, force: true });
     else window.scrollTo(0, y);
   }, [phase]);
 
+  const jumpToNext = useCallback(() => {
+    const el = nextRef.current;
+    if (!el) return;
+    const y = el.getBoundingClientRect().top + window.scrollY;
+    const lenis = smooth.lenis;
+    if (lenis) lenis.scrollTo(y, { immediate: true, force: true });
+    else window.scrollTo(0, y);
+  }, []);
   const reportLakeReady = useCallback((ready: boolean) => setLakeReady(ready), []);
   const value = useMemo<RevealState>(
-    () => ({ phase, direct, lakeReady, lakeVisible, lakeNear, setLakeReady: reportLakeReady }),
-    [phase, direct, lakeReady, lakeVisible, lakeNear, reportLakeReady],
+    () => ({ phase, directRun, direct, lakeReady, lakeVisible, lakeNear, setLakeReady: reportLakeReady, jumpToNext }),
+    [phase, directRun, direct, lakeReady, lakeVisible, lakeNear, reportLakeReady, jumpToNext],
   );
 
   return (
