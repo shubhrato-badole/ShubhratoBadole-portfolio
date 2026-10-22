@@ -29,7 +29,7 @@
   position: relative;
   z-index: 2;
   /* tighter top padding than before: the lines run behind this paragraph, so it reads as a continuation of the hero */
-  padding: clamp(64px, 11vh, 120px) clamp(18px, 4vw, 48px) clamp(56px, 10vh, 110px);
+ padding: clamp(80px, 13vh, 140px) clamp(18px, 4vw, 48px) clamp(56px, 10vh, 110px);
 }
 .statementText {
   margin: 0 auto;
