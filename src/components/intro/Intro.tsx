@@ -776,7 +776,7 @@ export default function Intro({ onComplete }: IntroProps) {
       };
       const a = el.animate(frames, o);
       S.anims.push(a);
-      return a.finished.catch(() => {});
+      return a.finished.catch(() => { });
     }
     function clean(v: string) {
       return v.replace(/\s+/g, ' ').trim().slice(0, 24);
@@ -808,7 +808,7 @@ export default function Intro({ onComplete }: IntroProps) {
       S.anims.forEach((a) => {
         try {
           a.cancel();
-        } catch {}
+        } catch { }
       });
       S.anims = [];
       s1.hidden = false;
@@ -826,7 +826,7 @@ export default function Intro({ onComplete }: IntroProps) {
       let stored = '';
       try {
         stored = window.localStorage.getItem('visitorName') || '';
-      } catch {}
+      } catch { }
       try {
         await sleep(250, id);
         await Promise.all(
@@ -890,7 +890,7 @@ export default function Intro({ onComplete }: IntroProps) {
       S.name = v;
       try {
         window.localStorage.setItem('visitorName', v);
-      } catch {}
+      } catch { }
       startLoading();
     }
     input.addEventListener('input', onInput);
@@ -979,6 +979,15 @@ export default function Intro({ onComplete }: IntroProps) {
             ])
         );
         chk(id);
+
+        const greeting = $('#intro-greeting');
+
+        if (greeting) {
+          greeting.textContent = S.name
+            ? `Welcome, ${titleCase(S.name)}`
+            : '';
+        }
+
         s1.hidden = true;
         s2.hidden = false;
         await play(s2, [{ opacity: 0 }, { opacity: 1 }], { duration: 350, easing: 'ease-out' });
@@ -1017,7 +1026,7 @@ export default function Intro({ onComplete }: IntroProps) {
       S.anims.forEach((a) => {
         try {
           a.cancel();
-        } catch {}
+        } catch { }
       });
       window.removeEventListener('pointermove', onFirstMove);
       input.removeEventListener('input', onInput);
@@ -1083,6 +1092,8 @@ export default function Intro({ onComplete }: IntroProps) {
         <section id="intro-s2" className={styles.loader} hidden aria-label="Loading">
           <div className={styles.lContainer}>
             <div className={styles.lContent}>
+              <p id="intro-greeting" className={styles.lGreeting} />
+
               <p className={styles.lText}>
                 Production AI systems and backend products, built to be fast, secure and scalable
               </p>
