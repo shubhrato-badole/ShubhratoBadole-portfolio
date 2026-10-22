@@ -30,7 +30,7 @@ const LINE_START = 2.4;
 
 /* How closely the scene follows the scrollbar. Lenis already smooths the scroll itself, so a big value here stacks a second delay on top
    (that is the "lag"): 1 trailed by about a second, 0.4 is still soft but keeps up. Raise it if you want it floatier. */
-const SCRUB = 0.2;
+const SCRUB = true;
 
 /* Set to true ONLY after you have run `node scripts/tint-falling.mjs` (it creates public/about/falling-blue.webp). false = the original GIF + CSS recolour. */
 const BAKED_TINT = false;
