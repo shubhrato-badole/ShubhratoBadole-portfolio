@@ -33,7 +33,7 @@ export default function GlassButton({ label, href, onClick, size = 'sm', icon, c
   const root = useRef<HTMLElement | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    const a = registerStroke(root.current), b = startGradient(canvas.current, tone);
+    const a = registerStroke(root.current), b = startGradient(canvas.current, tone, className.includes('gb--follow'));
     return () => { a(); b(); };
   }, [tone]);
   const cls = `gb gb--${size}${tone === 'blue' ? ' gb--blue' : ''}${className ? ' ' + className : ''}`;
