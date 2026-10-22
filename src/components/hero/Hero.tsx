@@ -28,45 +28,57 @@ function prefersReduce() {
 function scramblePitch(el: HTMLElement, delayStart: number): () => void {
   const text = el.textContent ?? '';
   el.textContent = '';
-  const STAGGER = 26; // ms between each character's start — controls sweep speed
-  const STEP = 26; // ms per glyph flicker
-  const TICKS = 8; // flickers before a character locks in
+  const STAGGER = 26;
+  const STEP = 26;
+  const TICKS = 8;
   const timeouts: number[] = [];
   const intervals: number[] = [];
 
-  text.split('').forEach((ch, i) => {
-    const span = document.createElement('span');
-    span.className = styles.tchar;
-    span.textContent = ch === ' ' ? '\u00A0' : ch;
-    el.appendChild(span);
+  let i = 0; // running character index, keeps the sweep timing the same
+  const words = text.split(' ');
+  words.forEach((word, wi) => {
+    // each word is one unbreakable box: lines can only wrap BETWEEN words
+    const w = document.createElement('span');
+    w.className = styles.tword;
+    el.appendChild(w);
 
-    const delay = delayStart + i * STAGGER;
-    if (ch === ' ') {
+    word.split('').forEach((ch) => {
+      const span = document.createElement('span');
+      span.className = styles.tchar;
+      span.textContent = ch;
+      w.appendChild(span);
+
       timeouts.push(
         window.setTimeout(() => {
           span.style.opacity = '1';
-          span.classList.add(styles.resolved);
-        }, delay)
+          let tick = 0;
+          const t = window.setInterval(() => {
+            if (tick < TICKS) {
+              span.textContent = GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+              tick++;
+            } else {
+              span.textContent = ch;
+              span.classList.add(styles.resolved);
+              window.clearInterval(t);
+            }
+          }, STEP);
+          intervals.push(t);
+        }, delayStart + i * STAGGER)
       );
-      return;
+      i++;
+    });
+
+    if (wi < words.length - 1) {
+      el.appendChild(document.createTextNode(' ')); // a real space: the only legal break point
+      i++;
     }
-    timeouts.push(
-      window.setTimeout(() => {
-        span.style.opacity = '1';
-        let tick = 0;
-        const t = window.setInterval(() => {
-          if (tick < TICKS) {
-            span.textContent = GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
-            tick++;
-          } else {
-            span.textContent = ch;
-            span.classList.add(styles.resolved);
-            window.clearInterval(t);
-          }
-        }, STEP);
-        intervals.push(t);
-      }, delay)
-    );
+  });
+
+  // lock each character's width so flickering glyphs ($, %, {}) can't re-wrap lines mid-animation
+  const spans = Array.from(el.querySelectorAll<HTMLElement>(`.${styles.tchar}`));
+  const widths = spans.map((s) => s.getBoundingClientRect().width);
+  spans.forEach((s, k) => {
+    s.style.width = `${widths[k]}px`;
   });
 
   return () => {
@@ -154,6 +166,7 @@ export default function Hero({ ready = true }: HeroProps) {
           label="Let's talk"
           size="sm"
           tone="blue"
+          className="gb--follow"
           onClick={(e) => handleAnchor(e as React.MouseEvent<HTMLAnchorElement>, '#contact')}
         />
       </div>
