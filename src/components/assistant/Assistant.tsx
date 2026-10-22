@@ -658,7 +658,7 @@ export default function Assistant({
         showBubble(BUBBLE_IDLE[idleShown.current]);
         idleShown.current += 1;
       }
-    }, 55000);
+    }, 80000);
     return () => {
       timers.forEach((t) => window.clearTimeout(t));
       window.clearInterval(idle);
