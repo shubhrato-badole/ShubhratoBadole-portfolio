@@ -32,13 +32,26 @@ function drawWave(ctx: CanvasRenderingContext2D, w: Wave, t: number, W: number, 
   ctx.fillStyle = grad; ctx.fill();
 }
 
-export function startGradient(canvas: HTMLCanvasElement | null, tone: 'purple' | 'blue' = 'purple'): () => void {
+/* brightness of each wave relative to the accent: <=1 darkens it, >1 mixes it towards white (same light/dark spread as the blue set) */
+const FOLLOW_K = [1, 0.8, 0.45, 1.45, 1.1, 1.6];
+const hexToRgb = (h: string): [number, number, number] | null => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(h.trim()); if (!m) return null;
+  const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+const tinted = (a: [number, number, number], k: number): [number, number, number] =>
+  k <= 1 ? [a[0] * k, a[1] * k, a[2] * k] : [a[0] + (255 - a[0]) * (k - 1), a[1] + (255 - a[1]) * (k - 1), a[2] + (255 - a[2]) * (k - 1)];
+
+/** follow = the haze takes the Stack's live accent colour (--sr-accent: cobalt at rest, the hovered card's colour on hover) */
+export function startGradient(canvas: HTMLCanvasElement | null, tone: 'purple' | 'blue' = 'purple', follow = false): () => void {
   if (!canvas || typeof window === 'undefined') return () => {};
   const ctx = canvas.getContext('2d'); const parent = canvas.parentElement; if (!ctx || !parent) return () => {};
-  const waves = tone === 'blue' ? WAVES.map((w, i) => ({ ...w, color: BLUE[i] })) : WAVES;
+  const base = tone === 'blue' ? WAVES.map((w, i) => ({ ...w, color: BLUE[i] })) : WAVES;
+  let waves = base, lastAccent = '';
   let W = 0, H = 0, raf = 0, on = false, lastDraw = 0; const t0 = performance.now();
   const size = () => { const dpr = 1; /* blurred by 6px anyway: 1x looks identical */ W = parent.clientWidth; H = parent.clientHeight; canvas.width = Math.max(1, Math.round(W * dpr)); canvas.height = Math.max(1, Math.round(H * dpr)); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
-  const frame = (now: number) => { raf = requestAnimationFrame(frame); if (!W || !H || document.hidden || now - lastDraw < 33) return; lastDraw = now; const t = (now - t0) / 1000; ctx.clearRect(0, 0, W, H); for (const w of waves) drawWave(ctx, w, t, W, H); };   // 30 fps is plenty for a slow haze
+  const frame = (now: number) => { raf = requestAnimationFrame(frame); if (!W || !H || document.hidden || now - lastDraw < 33) return; lastDraw = now;
+    if (follow) { const v = getComputedStyle(document.documentElement).getPropertyValue('--sr-accent'); if (v !== lastAccent) { lastAccent = v; const a = hexToRgb(v); waves = a ? base.map((w, i) => ({ ...w, color: tinted(a, FOLLOW_K[i]) })) : base; } }
+    const t = (now - t0) / 1000; ctx.clearRect(0, 0, W, H); for (const w of waves) drawWave(ctx, w, t, W, H); };   // 30 fps is plenty for a slow haze
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const ro = new ResizeObserver(() => { size(); if (reduce) frame(performance.now()); }); ro.observe(parent); size();
   const io = new IntersectionObserver(([e]) => { const vis = !!e?.isIntersecting; if (vis && !on && !reduce) { on = true; raf = requestAnimationFrame(frame); } else if (!vis && on) { on = false; cancelAnimationFrame(raf); } });
