@@ -41,5 +41,7 @@
 .gb__icon svg { width: 1rem; height: 1rem; display: block; }
 .gb:focus-visible { outline: 1px solid #fff; outline-offset: 3px; }
 /* the hero's palette (cobalt #4C6FFF on ink): same button, blue colours */
+/* follows the Stack's live accent (--sr-accent): cobalt at rest, the hovered card's colour on hover, then back (the scene eases the value) */
+.gb.gb--follow { --btn-stroke-colors: color-mix(in srgb, var(--sr-accent, #4c6fff) 45%, #000) 0%, var(--sr-accent, #4c6fff) 4%, color-mix(in srgb, var(--sr-accent, #4c6fff) 14%, #fff) 31%, color-mix(in srgb, var(--sr-accent, #4c6fff) 14%, #fff) 60%, color-mix(in srgb, var(--sr-accent, #4c6fff) 38%, #fff) 85%, var(--sr-accent, #4c6fff) 100%; --gb-glow: var(--sr-accent, #4c6fff); background: color-mix(in srgb, var(--sr-accent, #4c6fff) 9%, transparent); }
 .gb--blue { --btn-stroke-colors: #1b2a8f 0%, #4c6fff 4%, #e8eeff 31%, #e8eeff 60%, #b9c6ff 85%, #4c6fff 100%; --gb-glow: #4c6fff; background: rgba(76, 111, 255, .07); }
 @media (prefers-reduced-motion: reduce) { .gb__label > span { transition: none; } }
