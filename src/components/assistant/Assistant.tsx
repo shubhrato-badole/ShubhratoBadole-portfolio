@@ -468,6 +468,7 @@ export default function Assistant({
     setPhase('entering');
     setOpen(true);
     setUrl(true);
+    window.dispatchEvent(new Event('portfolio:assistant-open')); // the phone dock closes its menu
   }, []);
 
   const afterOpen = useCallback(() => {
