@@ -14,6 +14,13 @@ export const REVEAL = {
   idleMs: 90, // ring starts to drain this long after the last wheel tick
   decayDuration: 0.9, // seconds the ring takes to drain from full
   fireDuration: 0.18, // seconds from "threshold reached" to the hand-off
+  /* --- touch screens only (desktop numbers above are untouched) --- */
+  touchSlackPx: 6, // phones: "at the bottom" may be off by this many px (address bar / sub-pixel scroll positions)
+  settleVelocityTouch: 3, // phones: how still the page must be (px / frame) before the ring arms
+  idleMsTouch: 260, // phones: ring starts to drain this long after the finger last moved (a finger pauses between events)
+  touchGain: 1.5, // phones: one swipe fills the ring faster than the same distance of mouse wheel
+  flickSpeed: 0.5, // phones: a quick flick (px / ms) at the bottom fills the ring completely
+  flickMinFill: 0.2, // ...as long as the ring has already started filling (fraction)
 } as const;
 
 const RING_RADIUS = 48; // the ring's SVG circle (viewBox 100)
@@ -42,7 +49,8 @@ export type RevealEngine = {
 export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
   const { root, panel, overlay, bar } = o;
   const circumference = 2 * Math.PI * RING_RADIUS;
-  const threshold = window.matchMedia('(pointer: coarse)').matches ? REVEAL.thresholdTouch : REVEAL.threshold;
+  const coarse = window.matchMedia('(pointer: coarse)').matches; // a phone / tablet: finger, no wheel
+  const threshold = coarse ? REVEAL.thresholdTouch : REVEAL.threshold;
 
   const st = {
     s: 0, // raw wheel input, 0..threshold
@@ -99,8 +107,11 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
     window.removeEventListener('wheel', onWheel);
     window.removeEventListener('touchstart', onTouchStart);
     window.removeEventListener('touchmove', onTouchMove);
+    window.removeEventListener('touchend', onTouchEnd);
+    window.removeEventListener('touchcancel', onTouchEnd);
     window.removeEventListener('wheel', block);
     window.removeEventListener('touchmove', block);
+    document.documentElement.removeAttribute('data-pull-work');
   };
 
   const fire = () => {
@@ -146,10 +157,24 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
     put(overlay, 'clipPath', g >= 1 ? 'none' : `inset(${st.height * (1 - g)}px 0px 0px 0px)`);
     put(overlay, 'visibility', g > 0 ? 'visible' : 'hidden');
     put(overlay, 'pointerEvents', g > 0.95 ? 'auto' : 'none');
+    document.documentElement.toggleAttribute('data-pull-work', g > 0); // flag only: the phone dock hides while this ring is on screen
 
     /* 2. extra wheel at the very bottom fills the ring (same maths as the reference's wheel hook) */
-    const atEnd = limit > 0 && scroll >= limit * (1 - REVEAL.bottomEps);
-    st.armed = !st.fired && g >= 0.999 && atEnd && Math.abs(velocity) <= REVEAL.settleVelocity;
+    let atEnd = limit > 0 && scroll >= limit * (1 - REVEAL.bottomEps);
+    let wiped = g >= 0.999;
+    let settle: number = REVEAL.settleVelocity;
+    if (coarse) {
+      /* Phones: the strict desktop checks above never pass there. The address bar changes the screen height while you
+         scroll and positions are fractional, so "exactly at the bottom" was off by a pixel or two and the ring never
+         armed (that was the "press and push" that did nothing). Same rules, with a few pixels of slack. */
+      wiped = st.height > 0 && H - pr.bottom >= st.height - REVEAL.touchSlackPx;
+      if (!atEnd && g > 0.9) {
+        const nativeLimit = document.documentElement.scrollHeight - window.innerHeight;
+        atEnd = nativeLimit > 0 && scroll >= nativeLimit - REVEAL.touchSlackPx;
+      }
+      settle = REVEAL.settleVelocityTouch;
+    }
+    st.armed = !st.fired && wiped && atEnd && Math.abs(velocity) <= settle;
     const now = performance.now();
     if (!st.latched && st.s >= threshold) {
       st.latched = true;
@@ -158,7 +183,7 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
     if (st.latched) {
       st.n = Math.min(threshold, st.n + (threshold / REVEAL.fireDuration) * dt);
     } else {
-      if (!st.armed || now - st.lastInput > REVEAL.idleMs) st.s = Math.max(0, st.s - (threshold / REVEAL.decayDuration) * dt);
+      if (!st.armed || now - st.lastInput > (coarse ? REVEAL.idleMsTouch : REVEAL.idleMs)) st.s = Math.max(0, st.s - (threshold / REVEAL.decayDuration) * dt);
       st.n += (st.s - st.n) * (1 - Math.exp(-14 * dt));
     }
     st.progress = clamp(st.n / threshold);
@@ -196,14 +221,29 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
     add(e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1));
   };
   let touchY = 0;
+  let touchT = 0; // when the finger last moved
+  let touchV = 0; // finger speed, px / ms (positive = swiping up = scrolling down)
   const onTouchStart = (e: TouchEvent) => {
     touchY = e.touches[0]?.clientY ?? 0;
+    touchT = performance.now();
+    touchV = 0;
   };
   const onTouchMove = (e: TouchEvent) => {
     const y = e.touches[0]?.clientY ?? touchY;
     const delta = touchY - y;
     touchY = y;
-    add(delta);
+    const now = performance.now();
+    touchV = delta / Math.max(1, now - touchT);
+    touchT = now;
+    add(delta * REVEAL.touchGain);
+  };
+  /* a quick flick up at the bottom opens Contact in one go, like a hard scroll with a mouse wheel */
+  const onTouchEnd = () => {
+    if (!st.armed || st.fired) return;
+    if (touchV >= REVEAL.flickSpeed && performance.now() - touchT < 90 && st.s >= threshold * REVEAL.flickMinFill) {
+      st.s = threshold;
+      st.lastInput = performance.now();
+    }
   };
 
   measure();
@@ -213,6 +253,8 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
   window.addEventListener('wheel', onWheel, { passive: true });
   window.addEventListener('touchstart', onTouchStart, { passive: true });
   window.addEventListener('touchmove', onTouchMove, { passive: true });
+  window.addEventListener('touchend', onTouchEnd, { passive: true });
+  window.addEventListener('touchcancel', onTouchEnd, { passive: true });
   gsap.ticker.add(tick);
 
   return {
