@@ -5,6 +5,7 @@ import gsap from 'gsap';
 import SignalField from './SignalField';
 import Assistant from '../assistant/Assistant';
 import GlassButton from '../ui/GlassButton';
+import MobileDock from '../dock/MobileDock';
 import { scrollToTarget } from '../reveal/smooth';
 import styles from './hero.module.css';
 
@@ -207,6 +208,9 @@ export default function Hero({ ready = true }: HeroProps) {
           </div>
         </section>
       </main>
+
+      {/* phones (760px and below): the top bar above is hidden and this bottom dock takes over; the assistant's orb sits in its right end */}
+      <MobileDock ready={ready} onAnchor={handleAnchor} />
 
       {/* floating orb + full-screen assistant (replaces the old "Ask about Shubhrato" button and panel) */}
       <Assistant ready={ready} />
