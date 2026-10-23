@@ -86,8 +86,8 @@
 }
 .ch {
   display: inline-block;
-  /* Anybody's own axes (range is 50–150 wdth, 100–900 wght, per the
-     @font-face load in layout.tsx) — was "wdth" 64, "wght" 250, which is
+  /* Anybody's own axes (range is 50â€“150 wdth, 100â€“900 wght, per the
+     @font-face load in layout.tsx) â€” was "wdth" 64, "wght" 250, which is
      both quite condensed and quite light; that combination is what was
      thinning out at hero scale. This keeps the condensed character but
      with enough weight to hold up big. */
@@ -99,7 +99,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: clamp(18px, 2.6vh, 28px);        /* tagline → button */
+  gap: clamp(18px, 2.6vh, 28px);        /* tagline â†’ button */
   margin-top: clamp(2px, 0.5vh, 6px); 
 }
 .pitch {
@@ -166,8 +166,8 @@
   border-color: transparent;
   color: var(--ink);
 }
-/* "Ask about Shubhrato" stays the plain dark-glass secondary style —
-   same as Contact, distinguished only by label — with a soft light glow
+/* "Ask about Shubhrato" stays the plain dark-glass secondary style â€”
+   same as Contact, distinguished only by label â€” with a soft light glow
    that fades in on hover rather than a permanent bright fill */
 .askBtn {
   position: relative;
@@ -246,12 +246,12 @@
 .nameSlim {
   position: relative;
   z-index: 1;
-  /* was: font-size: calc(var(--slim) * 0.92) — --slim's own max (23rem /
+  /* was: font-size: calc(var(--slim) * 0.92) â€” --slim's own max (23rem /
      368px) is enormous, so scaling it down 8% wasn't enough; this is
      self-contained and meaningfully smaller instead */
   font-size: clamp(52px, 9.5vw, 128px);
   line-height: 0.85;
-  /* loosen tracking locally — the global --ls is -0.02em (quite tight,
+  /* loosen tracking locally â€” the global --ls is -0.02em (quite tight,
      which is what was causing letters to touch), without changing that
      shared value for wherever else it's used */
   --ls: 0.015em;
@@ -333,7 +333,7 @@
   background: radial-gradient(60% 60% at 70% 30%, var(--dusk), var(--ink));
 }
 
-/* assistant preview — trigger now lives in .cta; this wrapper only
+/* assistant preview â€” trigger now lives in .cta; this wrapper only
    positions the dropdown panel, fixed to the corner regardless of
    where the trigger button sits on the page */
 .bot {
@@ -473,4 +473,21 @@
   top: calc(18px + env(safe-area-inset-top, 0px));
   right: clamp(18px, 4vw, 48px);
   z-index: 21;                                
+}
+
+/* ---------- phones (760px and below): the bottom dock replaces the top bar (components/dock) ---------- */
+@media (max-width: 760px) {
+  .nav,
+  .navCta {
+    display: none;
+  }
+  /* the 6% film-grain layer covers the whole screen above every section: on phones that is a full-screen blend on every frame for
+     something that cannot be seen at phone pixel density */
+  .heroRoot::before {
+    display: none;
+  }
+  /* lifts the tagline + button clear of the dock (56px bar + 16px margin) */
+  .heroRoot {
+    --hero-pad-b: calc(112px + env(safe-area-inset-bottom, 0px));
+  }
 }
