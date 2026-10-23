@@ -84,9 +84,13 @@ const LauncherOrb = forwardRef<LauncherHandle, Props>(function LauncherOrb({ run
     let raf = 0;
     let last = performance.now();
     const parent = canvas.parentElement;
+    /* phones (760px and below): this orb is on screen in every section, so it is drawn at 30 fps and at most 1.5x pixels
+       (it is only 40px wide; the difference cannot be seen, the saving is constant) */
+    const phone = window.matchMedia('(max-width: 760px)').matches;
+    const minGap = phone ? 30 : 0;
 
     const size = () => {
-      sc.resize(canvas.clientWidth, canvas.clientHeight, Math.min(window.devicePixelRatio || 1, 2));
+      sc.resize(canvas.clientWidth, canvas.clientHeight, Math.min(window.devicePixelRatio || 1, phone ? 1.5 : 2));
     };
     const paint = () => {
       const th = themeRef.current;
@@ -107,6 +111,8 @@ const LauncherOrb = forwardRef<LauncherHandle, Props>(function LauncherOrb({ run
       sc.draw();
     };
     const frame = (now: number) => {
+      raf = requestAnimationFrame(frame);
+      if (now - last < minGap) return; // phones: skip every other frame
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       t += dt;
@@ -115,7 +121,6 @@ const LauncherOrb = forwardRef<LauncherHandle, Props>(function LauncherOrb({ run
       px += (tx - px) * 0.08;
       py += (ty - py) * 0.08;
       paint();
-      raf = requestAnimationFrame(frame);
     };
     const onMove = (e: PointerEvent) => {
       const r = canvas.getBoundingClientRect();
