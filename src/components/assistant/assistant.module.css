@@ -601,6 +601,31 @@
 }
 
 
+/* ---------- phones (760px and below): the orb lives inside the bottom dock (components/dock) ----------
+   The dock is 56px tall with 16px margins; the orb is centred in its right end (24px from the right / bottom edge).
+   The speech bubble opens ABOVE the dock instead of beside the orb. */
+@media (max-width: 760px) {
+  .launcher {
+    --size: 40px;
+    /* centred in the right end of the fixed-size dock: dock right edge + 8px inside */
+    right: calc((100% - min(260px, calc(100vw - 32px))) / 2 + 8px);
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    gap: 0;
+  }
+  .orbBtn {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28), 0 4px 16px var(--h-glow);
+  }
+  .bubble {
+    position: absolute;
+    right: -8px;
+    bottom: calc(var(--size) + 26px);
+    margin: 0;
+    width: max-content;
+    max-width: min(300px, calc(100vw - 32px));
+  }
+}
+
+
 @media (prefers-reduced-motion: reduce) {
   .bubble,
   .chip,
