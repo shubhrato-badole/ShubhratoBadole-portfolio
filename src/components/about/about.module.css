@@ -359,3 +359,18 @@
 .details li {
   will-change: transform, opacity;
 }
+
+/* ---------- the portrait copy of the lines (phones held upright only) ---------- */
+.linesP {
+  display: none;
+  /* the tall frame is scaled down more than the wide one, so the stroke is thicker in its own units to look the same on screen */
+  --about-line-width: 1.7;
+}
+@media (max-width: 760px) and (orientation: portrait) {
+  .lines {
+    display: none;
+  }
+  .lines.linesP {
+    display: block;
+  }
+}
