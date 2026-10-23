@@ -25,6 +25,31 @@ const LINE_TIMING: [number, number][] = [
   [5.4, 9], [5.4, 9], // the box, out from the middle of its right edge, closing on the left
 ];
 
+/* phones held upright: the lines are drawn from a portrait copy (see the second <svg> below); landscape phones, tablets and desktop keep the original */
+const PORTRAIT_QUERY = '(max-width: 760px) and (orientation: portrait)';
+
+/* the 18 strokes of the line drawing (1920 x 1080 space); the portrait copy draws the very same strokes turned a quarter-way over */
+const LINE_PATHS = [
+  'M960 540.3L-57 540.3',
+  'M960 540.3L1986 540.3',
+  'M959.3 540L959.3 -126',
+  'M959.3 540L959.3 1207.1',
+  'M959.8 540.2L264.8 -153.8',
+  'M959.8 539.8L1654.2 -154.2',
+  'M959.6 539.6L1653.3 1233.3',
+  'M959.5 540L406.6 1092.1',
+  'M1544.8 540.2L827.5 -128.8',
+  'M1545.2 541.2L827.8 1210.2',
+  'M1356.7 540L2074 -129',
+  'M1356.6 541L2074 1210',
+  'M564.8 540.2L-152.5 -128.8',
+  'M565.2 541.2L-152.2 1210.2',
+  'M370.6 540L1088 -129',
+  'M371.2 540.8L1090.2 1206.8',
+  'M1356.75 538.75V143.25L565.25 145.75V538.75',
+  'M1356.75 538.75V933.75H565.25V538.75',
+];
+
 /* the lines start once Build has grown to full size (timeline units), keeping exactly the same drawing speed */
 const LINE_START = 2.4;
 
@@ -32,8 +57,9 @@ const LINE_START = 2.4;
    (that is the "lag"): 1 trailed by about a second, 0.4 is still soft but keeps up. Raise it if you want it floatier. */
 const SCRUB = true;
 
-/* Set to true ONLY after you have run `node scripts/tint-falling.mjs` (it creates public/about/falling-blue.webp). false = the original GIF + CSS recolour. */
-const BAKED_TINT = false;
+/* true = public/about/falling-blue.webp (the falling man already recoloured, animated WebP: no live colour filter, lighter to draw).
+   false = the original GIF + the CSS hue-rotate. */
+const BAKED_TINT = true;
 
 export default function About() {
   const rootRef = useRef<HTMLElement>(null);
@@ -47,7 +73,9 @@ export default function About() {
 
     // Animations only run when motion is OK; otherwise the section renders statically.
     const mm = gsap.matchMedia();
-    mm.add('(prefers-reduced-motion: no-preference)', () => {
+    mm.add({ motion: '(prefers-reduced-motion: no-preference)', portrait: PORTRAIT_QUERY }, (ctx) => {
+      const { motion, portrait } = (ctx.conditions || {}) as { motion?: boolean; portrait?: boolean };
+      if (!motion) return;
       const undo: (() => void)[] = [];
       // split text into word spans; cleanup puts the original text back
       all('[data-split]').forEach((el) => {
@@ -88,7 +116,8 @@ export default function About() {
       const tear = one('[data-fall-tear]');
       const words = all('[data-word-in]');
       const sideLists = all('[data-details]');
-      const lineEls = all('[data-lines] path') as unknown as SVGPathElement[];
+      // phones held upright draw the portrait copy of the lines (same 18 strokes, same timing); everything else the landscape one
+      const lineEls = all(portrait ? '[data-lines-p] path' : '[data-lines] path') as unknown as SVGPathElement[];
       const textLines = all('[data-fall-line]');
       if (fall && card && tear && words.length === 3 && sideLists.length === 3 && lineEls.length === LINE_TIMING.length) {
         const sideLines = sideLists.map((ul) => all('li', ul));
@@ -220,24 +249,17 @@ export default function About() {
 
   <div className={styles.fall} data-fall>
     <svg className={styles.lines} data-lines viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <path d="M960 540.3L-57 540.3" />
-      <path d="M960 540.3L1986 540.3" />
-      <path d="M959.3 540L959.3 -126" />
-      <path d="M959.3 540L959.3 1207.1" />
-      <path d="M959.8 540.2L264.8 -153.8" />
-      <path d="M959.8 539.8L1654.2 -154.2" />
-      <path d="M959.6 539.6L1653.3 1233.3" />
-      <path d="M959.5 540L406.6 1092.1" />
-      <path d="M1544.8 540.2L827.5 -128.8" />
-      <path d="M1545.2 541.2L827.8 1210.2" />
-      <path d="M1356.7 540L2074 -129" />
-      <path d="M1356.6 541L2074 1210" />
-      <path d="M564.8 540.2L-152.5 -128.8" />
-      <path d="M565.2 541.2L-152.2 1210.2" />
-      <path d="M370.6 540L1088 -129" />
-      <path d="M371.2 540.8L1090.2 1206.8" />
-      <path d="M1356.75 538.75V143.25L565.25 145.75V538.75" />
-      <path d="M1356.75 538.75V933.75H565.25V538.75" />
+      {LINE_PATHS.map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </svg>
+    {/* portrait phones: the same strokes with x and y swapped, in a tall 1080 x 1920 frame, so the cross, the diagonals and the box all stay in view */}
+    <svg className={`${styles.lines} ${styles.linesP}`} data-lines-p viewBox="0 0 1080 1920" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <g transform="matrix(0 1 1 0 0 0)">
+        {LINE_PATHS.map((d) => (
+          <path key={d} d={d} />
+        ))}
+      </g>
     </svg>
 
     <div className={styles.beat}>
