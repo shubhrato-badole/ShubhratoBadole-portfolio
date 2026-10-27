@@ -1,0 +1,257 @@
+/* PHONE DOCK. Everything here lives inside the phone media query: above 760px the dock is display:none and the
+   top bar (hero.module.css) is shown exactly as before. */
+
+.dock,
+.scrim {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 64;
+    background: rgba(4, 1, 15, 0);
+    touch-action: none; /* the page behind does not scroll while the menu is up */
+    transition: background-color 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .scrimOn {
+    background: rgba(4, 1, 15, 0.55);
+    -webkit-backdrop-filter: blur(6px); /* only while the menu is open */
+    backdrop-filter: blur(6px);
+  }
+
+  .dock {
+    --dock-h: 56px;
+    --dock-edge: 16px;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    position: fixed;
+    /* a FIXED size, centred, like the reference: it never stretches with the screen (only shrinks if the screen is narrower than 260 + 32px) */
+    left: 0;
+    right: 0;
+    margin-inline: auto;
+    width: min(330px, calc(100vw - 32px));
+    bottom: calc(var(--dock-edge) + env(safe-area-inset-bottom, 0px));
+    z-index: 65; /* above the page and the Stack, under the assistant's orb (70) and its takeover (100) */
+    display: flex;
+    flex-direction: column;
+    border-radius: 28px;
+    color: #fff;
+    isolation: isolate;
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+    pointer-events: none;
+    transition: opacity 0.7s ease, transform 0.9s cubic-bezier(0.2, 0.9, 0.2, 1);
+  }
+  .dockOn {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+  /* hidden while a "(Just continue to reveal)" ring is on screen (the end of About and the end of Work), like the reference */
+  :global(html[data-pull-stack]) .dock,
+  :global(html[data-pull-work]) .dock {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+    pointer-events: none;
+  }
+
+  /* ---------- glass ---------- */
+  .glass,
+  .sheen {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  .glass {
+    background: linear-gradient(90deg, rgba(14, 20, 86, 0.8), rgba(48, 72, 210, 0.64) 55%, rgba(28, 42, 150, 0.76));
+    box-shadow: 0 10px 40px rgba(14, 24, 120, 0.35), 0 2px 10px rgba(0, 0, 0, 0.45);
+  }
+  /* the 1px outline: the same cobalt gradient as the hero buttons (.gb--blue) */
+  .glass::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(90deg, #1b2a8f 0%, #4c6fff 4%, #e8eeff 31%, #e8eeff 60%, #b9c6ff 85%, #4c6fff 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0.85;
+  }
+  .sheen {
+    background: linear-gradient(155deg, rgba(10, 14, 70, 0.97) 0%, rgba(34, 52, 175, 0.95) 55%, rgba(76, 111, 255, 0.9) 100%);
+    opacity: 0;
+    transition: opacity 0.5s var(--ease);
+  }
+  .dockOpen .sheen {
+    opacity: 1;
+  }
+
+  /* ---------- the bar (always visible) ---------- */
+  .bar {
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--dock-h) 1fr var(--dock-h);
+    align-items: center;
+    height: var(--dock-h);
+    flex: none;
+  }
+  .burger {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    width: var(--dock-h);
+    height: var(--dock-h);
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .burger span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    border-radius: 2px;
+    background: #fff;
+    transition: transform 0.5s var(--ease);
+  }
+  .dockOpen .burger span:nth-child(1) {
+    transform: translateY(4px) rotate(45deg);
+  }
+  .dockOpen .burger span:nth-child(2) {
+    transform: translateY(-4px) rotate(-45deg);
+  }
+
+  .mark {
+    justify-self: center;
+    padding: 0 4px;
+    border: 0;
+    background: none;
+    color: #fff;
+    font-family: var(--serif);
+    font-size: 1.75rem;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mark i {
+    font-style: italic;
+    color: #a9b9ff;
+  }
+  .orbSlot {
+    width: var(--dock-h);
+    height: var(--dock-h);
+  }
+
+  /* ---------- the menu panel (grows upward out of the bar) ---------- */
+  .panel {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.55s var(--ease);
+  }
+  .dockOpen .panel {
+    grid-template-rows: 1fr;
+  }
+  .panelClip {
+    min-height: 0;
+    overflow: hidden;
+  }
+  .panelBody {
+    max-height: calc(100svh - var(--dock-h) - 72px - env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 20px 20px 6px;
+  }
+  .label {
+    margin: 0 0 6px;
+    font: 500 0.6875rem/1 var(--mono);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+  .list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .item {
+    border-top: 1px solid rgba(255, 255, 255, 0.4);
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(6px);
+    transition: opacity 0.45s var(--ease), transform 0.6s var(--ease), filter 0.45s var(--ease);
+    transition-delay: calc(var(--i, 0) * 45ms);
+  }
+  .dockOpen .item,
+  .dockOpen .cta {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 3.25rem 1fr;
+    align-items: baseline;
+    width: 100%;
+    padding: 0.85rem 0 0.8rem;
+    border: 0;
+    background: none;
+    color: #fff;
+    text-decoration: none;
+    text-align: right;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .num {
+    justify-self: start;
+    font: 500 0.6875rem/1 var(--mono);
+    opacity: 0.75;
+  }
+  .name {
+    font-family: var(--sans);
+    font-size: 1.375rem;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+  }
+  .here {
+    display: inline-block;
+    margin-right: 0.45em;
+    color: #cdd8ff;
+  }
+  .row:active .name {
+    opacity: 0.6;
+  }
+  .cta {
+    display: flex;
+    justify-content: center;
+    padding: 1.1rem 0 1rem;
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(6px);
+    transition: opacity 0.45s var(--ease), transform 0.6s var(--ease), filter 0.45s var(--ease);
+    transition-delay: calc(var(--i, 0) * 45ms);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dock,
+    .scrim,
+    .panel,
+    .item,
+    .cta,
+    .sheen,
+    .burger span {
+      transition-duration: 0.01ms;
+      transition-delay: 0s;
+    }
+  }
+}
