@@ -1,0 +1,555 @@
+/* ---------------------------------------------------------------------------------------------
+   Contact (built into the page). The scene is ONE fixed canvas behind the page; the panel is normal page content,
+   so it scrolls with the page's own smooth scroller.
+
+   --pp : 0 → 1, written by ContactNative while the camera moves. It drives the panel sliding in.
+   --------------------------------------------------------------------------------------------- */
+
+.contact {
+  --ink: #f6f1ff;
+  --mute: #8f89ae;
+  --line: rgba(255, 255, 255, 0.30);
+  --line-hot: rgba(255, 255, 255, 0.9);
+  --accent: #8b6cff;
+  --accent-2: #c58cff;
+  --panel: #050309;
+  --serif: var(--font-wk-serif), 'Instrument Serif', 'Times New Roman', serif;
+  --mono: var(--font-wk-mono), 'IBM Plex Mono', ui-monospace, monospace;
+  --sans: var(--font-wk-sans), 'Instrument Sans', system-ui, sans-serif;
+
+  position: relative;
+  width: 100%;
+  height: 0; /* not part of the scroll until the reveal has opened it (NextReveal gives its slot 0 height until then) */
+  pointer-events: none;
+  color: var(--ink);
+}
+.open {
+  height: auto;
+  min-height: 100vh;
+  min-height: 100svh;
+  pointer-events: auto; /* so the cursor smoke also sees the scene half */
+}
+
+/* fixed BEHIND the page (z-index -1): Work is opaque and covers it, so it only shows through the window that opens
+   under Work and through this transparent section */
+.poster {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background: #120a26 var(--poster) center bottom / cover no-repeat;
+  pointer-events: none;
+}
+.stage {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+.shade {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(120% 90% at 30% 55%, rgba(5, 3, 12, 0) 40%, rgba(5, 3, 12, 0.55) 100%),
+    linear-gradient(180deg, rgba(5, 3, 12, 0.35) 0%, rgba(5, 3, 12, 0) 22%);
+  transition: opacity 0.7s ease;
+}
+.stageOn {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------------------------------------- the panel */
+.panel {
+  position: relative;
+  box-sizing: border-box;
+  margin-left: 50%;
+  width: 50%;
+  min-height: 100vh;
+  min-height: 100svh;
+  background: var(--panel);
+  /* slides in from the right while the camera arrives */
+  transform: translate3d(calc((1 - var(--pp, 0)) * 100%), 0, 0);
+  opacity: calc(0.15 + var(--pp, 0) * 0.85);
+  will-change: transform;
+}
+.in .panel {
+  will-change: auto;
+}
+/* a soft edge so the scene melts into the panel instead of ending on a straight line */
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 100%;
+  width: clamp(36px, 4.5vw, 84px);
+  background: linear-gradient(90deg, rgba(5, 3, 9, 0), rgba(5, 3, 9, 0.55) 65%, rgba(5, 3, 9, 0.96));
+  pointer-events: none;
+}
+/* a breath of lilac light in the top corner */
+.panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 38% at 0% 0%, rgba(124, 92, 255, 0.13), rgba(124, 92, 255, 0) 70%);
+  pointer-events: none;
+}
+.inner {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  max-width: 760px;
+  padding: clamp(6.5rem, 13vh, 9rem) clamp(1.5rem, 4vw, 4.25rem) clamp(3rem, 8vh, 5rem);
+}
+
+/* rows rise in one after another once the panel has arrived */
+.rv {
+  opacity: 0;
+  transform: translate3d(0, 22px, 0);
+  filter: blur(6px);
+  transition:
+    opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: calc(var(--i, 0) * 75ms + 150ms);
+}
+.in .rv {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/* ------------------------------------------------------------------------------------------- headline */
+.title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(3.3rem, 5.7vw, 6.4rem);
+  line-height: 0.9;
+  letter-spacing: -0.012em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.title > span {
+  display: block;
+  position: relative;
+}
+.title em {
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: -0.02em;
+  margin-right: 0.04em;
+}
+.l2 {
+  padding-left: 0.92em;
+}
+.arr {
+  position: absolute;
+  left: 0.04em;
+  top: 0.18em;
+  font-style: normal;
+  font-size: 0.34em;
+  color: var(--accent);
+  font-family: var(--sans);
+  line-height: 1;
+}
+.sub {
+  margin: 1.6rem 0 0;
+  font: 500 0.74rem/1.35 var(--mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #d9d2f2;
+}
+
+/* ------------------------------------------------------------------------------------------- rows */
+.form {
+  margin-top: clamp(2.2rem, 5vh, 3.2rem);
+}
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 36%) minmax(0, 1fr);
+  column-gap: 1.25rem;
+  align-items: start;
+  padding: 1.15rem 0 1.4rem;
+  border-top: 1px solid var(--line);
+  cursor: text;
+}
+.row:first-child {
+  cursor: default;
+  border-top-color: var(--line-hot);
+}
+.label {
+  font: 400 1.08rem/1.25 var(--sans);
+  color: #fff;
+  letter-spacing: -0.005em;
+  transition: color 0.3s ease;
+}
+.label small {
+  display: block;
+  margin-top: 0.3rem;
+  font: 500 0.64rem/1.3 var(--mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.label b {
+  margin-left: 0.12em;
+  color: #ff4d55;
+  font-weight: 500;
+}
+/* the line under the active row draws itself in */
+.field::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), transparent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.field:focus-within::after {
+  transform: scaleX(1);
+}
+.field:focus-within .label {
+  color: var(--accent-2);
+}
+.control {
+  display: block;
+  min-width: 0;
+}
+.control input,
+.control textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.12rem 0 0.2rem;
+  border: 0;
+  outline: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  font: 400 1rem/1.4 var(--sans);
+  caret-color: var(--accent-2);
+  resize: none;
+}
+.control textarea {
+  min-height: 4.4rem;
+  field-sizing: content; /* grows as you type, where the browser supports it */
+}
+.control ::placeholder {
+  color: #8d87ad;
+  opacity: 1;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.control input:focus::placeholder,
+.control textarea:focus::placeholder {
+  opacity: 0.45;
+}
+.control input:-webkit-autofill {
+  -webkit-text-fill-color: #fff;
+  transition: background-color 9999s ease 0s;
+}
+.err {
+  display: block;
+  margin-top: 0.4rem;
+  font: 500 0.66rem/1.3 var(--mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #ff7c86;
+  font-style: normal;
+  animation: errIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.bad {
+  border-top-color: rgba(255, 110, 120, 0.7);
+}
+@keyframes errIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ------------------------------------------------------------------------------------------- "what I can do" */
+.services {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.services li + li {
+  border-top: 1px solid var(--line);
+}
+.service {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  padding: 0.62rem 0;
+  cursor: pointer;
+  font: 400 1.2rem/1.2 var(--serif);
+  color: #e9e3fb;
+  transition: color 0.3s ease, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.service:hover {
+  color: #fff;
+  transform: translateX(5px);
+}
+.service:focus-visible {
+  outline: 1px solid var(--accent-2);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.radio {
+  position: relative;
+  flex: none;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  transition: border-color 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
+}
+.radio::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: #fff;
+  transform: scale(0);
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.service:hover .radio {
+  border-color: #fff;
+}
+.on {
+  color: #fff;
+}
+.on .radio {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 18px rgba(139, 108, 255, 0.65);
+}
+.on .radio::after {
+  transform: scale(1);
+}
+
+/* ------------------------------------------------------------------------------------------- send */
+.send {
+  cursor: default;
+  padding-bottom: 0;
+  border-top-color: var(--line);
+}
+.sendBody {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.95rem;
+}
+.status {
+  margin: 0;
+  min-height: 2.4em;
+  max-width: 34ch;
+  font: 500 0.68rem/1.45 var(--mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.status a {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ------------------------------------------------------------------------------------------- reach out directly */
+.direct {
+  margin-top: clamp(3.5rem, 9vh, 6rem);
+  padding-top: 0.5rem;
+}
+.directTitle {
+  margin: 0;
+  font: 400 clamp(2.7rem, 4.6vw, 4.6rem) / 0.95 var(--serif);
+  letter-spacing: -0.012em;
+  color: #fff;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(2rem, 5vh, 3rem) 2rem;
+  margin-top: clamp(1.8rem, 4vh, 2.6rem);
+}
+.group h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+  font: 400 1.05rem/1 var(--sans);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+.group li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.group p {
+  margin: 0;
+  font: 500 0.88rem/1.5 var(--mono);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+.idx {
+  font: 500 0.7rem/1 var(--mono);
+  color: #6f6a8c;
+}
+.group a,
+.current {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0;
+  font: 500 0.88rem/1.4 var(--mono);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fff;
+  text-decoration: none;
+}
+.group p a {
+  display: inline;
+}
+.group a::after,
+.current::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.1rem;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.group a:hover::after,
+.group a:focus-visible::after {
+  transform: scaleX(1);
+}
+.current::after {
+  transform: scaleX(1);
+}
+.group a:focus-visible {
+  outline: none;
+}
+.ico {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.group a:hover .ico {
+  transform: translate(2px, -2px);
+}
+.group h4 .ico {
+  transform: none;
+}
+.legal {
+  margin-top: clamp(2.6rem, 6vh, 4rem);
+  padding-top: 1.1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  font: 400 0.92rem/1.3 var(--sans);
+  color: #7d7898;
+}
+
+/* ------------------------------------------------------------------------------------------- phones */
+@media (max-width: 900px) {
+  /* the scene keeps the top of the screen; the panel is a sheet that rises over it and scrolls with the page */
+  .open {
+    box-sizing: border-box;
+    padding-top: 46vh;
+    padding-top: 46svh;
+  }
+  .panel {
+    margin: 0;
+    width: 100%;
+    min-height: 54vh;
+    min-height: 54svh;
+    border-radius: 26px 26px 0 0;
+    transform: translate3d(0, calc((1 - var(--pp, 0)) * 38svh), 0);
+    box-shadow: 0 -30px 60px rgba(5, 3, 9, 0.7);
+  }
+  .panel::before {
+    display: none;
+  }
+  .inner {
+    padding: 1.9rem 1.25rem calc(5.5rem + env(safe-area-inset-bottom, 0px));
+    max-width: none;
+  }
+  .title {
+    font-size: clamp(2.5rem, 12.2vw, 4.2rem);
+  }
+  .l2 {
+    padding-left: 0.8em;
+  }
+  .row {
+    grid-template-columns: 1fr;
+    row-gap: 0.55rem;
+    padding: 1rem 0 1.2rem;
+  }
+  .label small {
+    margin-top: 0.25rem;
+  }
+  .service {
+    font-size: 1.15rem;
+    padding: 0.7rem 0;
+  }
+  .control input,
+  .control textarea {
+    font-size: 1rem; /* 16px+: iOS does not zoom the page when a field is focused */
+  }
+  .grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 480px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv {
+    transition: none;
+    filter: none;
+    transform: none;
+    opacity: 1;
+  }
+  .stage,
+  .shade {
+    transition: none;
+  }
+  .service,
+  .ico {
+    transition: none;
+  }
+}
