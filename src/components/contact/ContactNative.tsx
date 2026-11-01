@@ -4,45 +4,41 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CS
 import gsap from 'gsap';
 import { useReveal } from '../reveal/NextReveal';
 import { smooth, scrollToTarget } from '../reveal/smooth';
-import { runRingTransition } from '../stack/ringTransition';
+import { runRingTransition, isRingRunning } from '../stack/ringTransition';
 import GlassButton from '../ui/GlassButton';
 import { CONTACT } from '../assistant/brain';
-import { createContactScene, type ContactScene } from './contactScene';
+import ContactBackdrop from './ContactBackdrop';
 import styles from './contactNative.module.css';
 
-/* The Contact section, built straight into the page (no iframe).
+/* The Contact section, built straight into the page.
 
-   WHY NOT AN IFRAME ANY MORE: an iframe swallows the cursor (so the project's cursor smoke could not reach it), cannot use
-   the ring transition, and had its own separate scroll (the cause of the mobile scroll trouble). Here the scene is ONE
-   fixed canvas behind the page and the panel is normal page content, so it scrolls with the same smooth scroller as
-   everything else, the smoke works over it (data-wk-smoke) and the ring transition opens it.
+   NO 3D ENGINE, NO IFRAME, NO SOUND, NO DOWNLOADED SCENE. The lake and the garden are two pictures (public/contact-scene/*.jpg);
+   ContactBackdrop moves them like a camera and adds the living parts (fireflies, falling petals, sparkles, water glints) in one
+   tiny canvas. That is why it looks like the real scene and costs almost nothing: no GPU scene, no workers, nothing to boot,
+   nothing that can fail, the same on every phone and laptop.
 
-   TWO WAYS IN (both end in the same place):
-   · SCROLL  : Work lifts away, the lake window, the ring fills (revealEngine), the window opens, then the camera slides left
-               to the tree and chairs while the black panel slides in from the right.
-   · BUTTON  : "Let's talk" / dock Contact: the project's RING transition covers the screen, the page jumps to Contact while
-               it is covered, the ring opens onto the lake, then the same camera move plays.
-   · NOTHING IS EVER BLANK: the lake poster is under everything; the live canvas only fades in once it has drawn a frame. */
+   TWO WAYS IN (both end in the same place, and both play exactly ONE ring):
+   · SCROLL  : Work lifts away, the lake window, the ring fills (revealEngine), the window opens, then the camera moves on to the
+               tree and chairs while the black panel slides in from the right.
+   · BUTTON  : "Let's talk" / dock Contact: the project's RING transition covers the screen, the page jumps to Contact while it is
+               covered, the ring opens onto the lake, then the same camera move plays. (If another ring is already covering the
+               screen, e.g. the Stack overlay's, Contact does not start a second one.) */
 
 const EMAIL = 'bshubhrato@gmail.com';
 const LOCATION = 'Nagpur, India';
 const SERVICES = ['AI & agentic RAG systems', 'backend APIs & data', 'full-stack web apps', 'secure auth & cybersecurity', 'cloud, Docker & CI/CD'];
-const POSTER_URL = '/contact-scene/lake-poster-own.jpg';
+const LAKE_URL = '/contact-scene/lake-poster.jpg';
+const GARDEN_URL = '/contact-scene/garden-poster.jpg';
 
-/* start loading the scene after the page has been idle this long even if the visitor has not scrolled yet */
-const IDLE_PRELOAD_MS = 6000;
 /* how long the camera takes from the lake to the garden (seconds) */
-const PAN_SECONDS = 3.2;
+const PAN_SECONDS = 2.7;
 const MOBILE_QUERY = '(max-width: 900px)';
 
-type IdleWindow = Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
-
-const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2); // gentle start, no long wait before it moves
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
-const isContactLink = (el: EventTarget | null) => !!(el as Element | null)?.closest?.('a[href="#contact"], a[href="/#contact"]');
 
 const subscribeMobile = (cb: () => void) => {
   const mq = window.matchMedia(MOBILE_QUERY);
@@ -50,13 +46,6 @@ const subscribeMobile = (cb: () => void) => {
   return () => mq.removeEventListener('change', cb);
 };
 const getMobile = () => window.matchMedia(MOBILE_QUERY).matches;
-
-const waitFor = (test: () => boolean, ms: number) =>
-  new Promise<void>((resolve) => {
-    const t0 = performance.now();
-    const step = () => (test() || performance.now() - t0 > ms ? resolve() : setTimeout(step, 60));
-    step();
-  });
 
 const Arrow = ({ down }: { down?: boolean }) => (
   <svg className={styles.ico} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -76,108 +65,28 @@ const Arrow = ({ down }: { down?: boolean }) => (
 
 export default function ContactNative() {
   const rootRef = useRef<HTMLElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<ContactScene | null>(null);
-  const readyRef = useRef(false);
-  const failedRef = useRef(false);
+  const ppRef = useRef(0); // the camera progress 0..1, read by the backdrop's canvas
   const tweenRef = useRef<gsap.core.Tween | null>(null);
   const playedRef = useRef(false);
   const lastRun = useRef(0);
 
-  const { phase, directRun, direct, lakeNear, lakeVisible, setLakeReady, jumpToNext } = useReveal();
+  const { phase, directRun, direct, lakeNear, lakeVisible, setLakeReady, subscribeProgress, jumpToNext } = useReveal();
   const open = phase === 'open';
   const opening = phase === 'opening';
   const engaged = open || opening;
   const mobile = useSyncExternalStore(subscribeMobile, getMobile, () => false);
 
-  const [load, setLoad] = useState(false);
-  const [ready, setReady] = useState(false); // the scene has drawn its first frame
-  const [failed, setFailed] = useState(false); // no WebGL: the poster stays, the panel still works
   const [seenRaw, setSeen] = useState(false);
   const [panelIn, setPanelIn] = useState(false); // the panel has arrived: its rows rise in one after another
   const seen = open && seenRaw;
-  const loadNow = load || direct;
 
-  /* ---------- 1. start loading the scene early enough (cheap, but never during the first moments of the page) ---------- */
+  /* pictures need no loading step: tell the reveal the lake is ready right away */
   useEffect(() => {
-    if (load) return;
-    const start = () => setLoad(true);
-    const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-    const w = window as IdleWindow;
-    const onScroll = () => {
-      if (window.scrollY > window.innerHeight * 0.6) start();
-    };
-    const onIntent = (e: Event) => {
-      if (isContactLink(e.target)) start();
-    };
-    let idleId = 0;
-    let timer = 0;
-    if (!conn?.saveData) {
-      timer = window.setTimeout(() => {
-        if (w.requestIdleCallback) idleId = w.requestIdleCallback(start, { timeout: 4000 });
-        else start();
-      }, IDLE_PRELOAD_MS);
-    }
-    const near = new IntersectionObserver(([e]) => e.isIntersecting && start(), { rootMargin: '500% 0px' });
-    if (rootRef.current) near.observe(rootRef.current);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    document.addEventListener('pointerover', onIntent, { passive: true });
-    document.addEventListener('focusin', onIntent);
-    document.addEventListener('touchstart', onIntent, { passive: true });
-    window.addEventListener('portfolio:open-contact', start);
-    return () => {
-      window.clearTimeout(timer);
-      if (idleId) w.cancelIdleCallback?.(idleId);
-      near.disconnect();
-      window.removeEventListener('scroll', onScroll);
-      document.removeEventListener('pointerover', onIntent);
-      document.removeEventListener('focusin', onIntent);
-      document.removeEventListener('touchstart', onIntent);
-      window.removeEventListener('portfolio:open-contact', start);
-    };
-  }, [load]);
+    setLakeReady(true);
+  }, [setLakeReady]);
 
-  /* ---------- 2. build the scene (the art is painted in small pieces, so scrolling never freezes) ---------- */
-  useEffect(() => {
-    if (!loadNow) return;
-    const cv = canvasRef.current;
-    if (!cv) return;
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const lowPower = window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 900;
-    const sc = createContactScene(cv, {
-      reduceMotion: reduce,
-      lowPower,
-      onReady: () => {
-        readyRef.current = true;
-        setReady(true);
-        setLakeReady(true);
-      },
-    });
-    if (!sc) {
-      failedRef.current = true;
-      setFailed(true);
-      setLakeReady(true);
-      return;
-    }
-    sceneRef.current = sc;
-    sc.setMobile(getMobile());
-    const onResize = () => sc.resize();
-    window.addEventListener('resize', onResize);
-    return () => {
-      window.removeEventListener('resize', onResize);
-      sc.destroy();
-      sceneRef.current = null;
-      readyRef.current = false;
-    };
-  }, [loadNow, setLakeReady]);
-
-  useEffect(() => {
-    sceneRef.current?.setMobile(mobile);
-    sceneRef.current?.resize();
-  }, [mobile, ready]);
-
-  /* ---------- 3. what the section can see of itself, and run the scene only while somebody can see it ---------- */
+  /* what the section can see of itself (the backdrop's little canvas only runs while somebody can see it) */
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
@@ -186,36 +95,35 @@ export default function ContactNative() {
     return () => io.disconnect();
   }, []);
 
-  useEffect(() => {
-    const sc = sceneRef.current;
-    if (!ready || !sc) return;
-    const run = open ? seen : opening || lakeNear;
-    const sync = () => (run && !document.hidden ? sc.start() : sc.stop());
-    if (run) sync();
-    /* a transient "not visible" while the layout changes under the hand-off must never freeze the camera move */
-    const t = run ? 0 : window.setTimeout(sync, open ? 400 : 0);
-    document.addEventListener('visibilitychange', sync);
-    return () => {
-      window.clearTimeout(t);
-      document.removeEventListener('visibilitychange', sync);
-    };
-  }, [ready, open, opening, lakeNear, seen]);
+  /* THE PULL: while the visitor pulls (the ring filling) the camera already creeps forward over the lake, in step with the ring; if
+     they let go the ring drains and the camera drifts back. When the ring is full the flight below continues from exactly there. */
+  useEffect(
+    () =>
+      subscribeProgress((p) => {
+        if (playedRef.current) return;
+        rootRef.current?.style.setProperty('--pull', (1 - Math.pow(1 - p, 2)).toFixed(4));
+      }),
+    [subscribeProgress],
+  );
 
-  /* ---------- 4. the camera move: lake -> tree and chairs, with the panel arriving on the right ---------- */
-  const setPanelProgress = useCallback((pe: number) => {
-    rootRef.current?.style.setProperty('--pp', smoothstep(0.34, 0.92, pe).toFixed(4));
+  /* ---------- the camera move: lake -> tree and chairs, with the panel arriving on the right ---------- */
+  const setProgress = useCallback((p: number) => {
+    const pe = ease(p);
+    const pp = smoothstep(0.22, 0.8, pe);
+    ppRef.current = pe;
+    const el = rootRef.current;
+    el?.style.setProperty('--pp', pp.toFixed(4)); // the panel
+    el?.style.setProperty('--cam', pe.toFixed(4)); // the pictures: overall progress
+    el?.style.setProperty('--rush', Math.pow(pe, 1.8).toFixed(4)); // the lake: the camera speeds up over the water
+    el?.style.setProperty('--land', (1 - Math.pow(1 - pe, 2.4)).toFixed(4)); // the garden: arrives fast, settles slowly
+    if (pe > 0.5) setPanelIn(true);
   }, []);
 
   const playPan = useCallback(
     (delay = 0) => {
       tweenRef.current?.kill();
       const o = { p: 0 };
-      const apply = () => {
-        sceneRef.current?.setPan(o.p);
-        const pe = ease(o.p);
-        setPanelProgress(pe);
-        if (pe > 0.5) setPanelIn(true);
-      };
+      const apply = () => setProgress(o.p);
       setPanelIn(false);
       apply();
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -225,31 +133,38 @@ export default function ContactNative() {
       }
       tweenRef.current = gsap.to(o, { p: 1, duration: PAN_SECONDS, delay, ease: 'none', onUpdate: apply });
     },
-    [setPanelProgress],
+    [setProgress],
   );
 
   /* SCROLL path: the moment the ring is full (the window starts to open) the camera starts to move */
   useEffect(() => {
-    if (direct || !engaged || playedRef.current || !(ready || failed)) return;
+    if (direct || !engaged || playedRef.current) return;
     playedRef.current = true;
-    playPan(0.2);
-  }, [direct, engaged, ready, failed, playPan]);
+    rootRef.current?.style.setProperty('--pull', '1');
+    playPan(0); // the flight carries on from the pull without a pause
+  }, [direct, engaged, playPan]);
 
-  /* BUTTON path: the project's ring transition covers the screen, the page jumps to Contact unseen, the ring opens onto the lake */
+  /* BUTTON path: ONE ring. The project's ring covers the screen, the page jumps to Contact unseen, the ring opens onto the lake.
+     If a ring is already on screen (the Stack overlay plays one before it sends us here) we ride on that one. */
   useEffect(() => {
     if (!direct || !open || directRun === lastRun.current) return;
     lastRun.current = directRun;
     playedRef.current = true;
     tweenRef.current?.kill();
-    void runRingTransition(async () => {
-      await waitFor(() => readyRef.current || failedRef.current, 5000);
+    const jump = () => {
       jumpToNext();
-      sceneRef.current?.setPan(0);
-      sceneRef.current?.renderOnce();
       setPanelIn(false);
-      rootRef.current?.style.setProperty('--pp', '0');
-    }).finally(() => playPan(0.35));
-  }, [direct, open, directRun, jumpToNext, playPan]);
+      setProgress(0);
+    };
+    if (isRingRunning()) {
+      void Promise.resolve().then(() => {
+        jump();
+        playPan(0.2);
+      });
+      return;
+    }
+    void runRingTransition(jump).finally(() => playPan(0.2));
+  }, [direct, open, directRun, jumpToNext, playPan, setProgress]);
 
   useEffect(
     () => () => {
@@ -257,6 +172,17 @@ export default function ContactNative() {
     },
     [],
   );
+
+  /* the reveal was re-armed (you left Contact): get ready to play the whole opening again next time */
+  useEffect(() => {
+    if (engaged) return;
+    playedRef.current = false;
+    tweenRef.current?.kill();
+    ppRef.current = 0;
+    rootRef.current?.style.setProperty('--pp', '0');
+    ['--cam', '--rush', '--land', '--pull'].forEach((v) => rootRef.current?.style.setProperty(v, '0'));
+    setPanelIn(false);
+  }, [engaged]);
 
   /* the panel's height changes as fonts and rows settle: keep the smooth scroller's idea of the page length right */
   useEffect(() => {
@@ -266,7 +192,8 @@ export default function ContactNative() {
     return () => ro.disconnect();
   }, [open]);
 
-  const show = ready && (engaged || lakeVisible);
+  const show = engaged || lakeVisible;
+  const backdropOn = (open ? seen : opening || lakeNear) && show;
 
   /* ---------- the form ---------- */
   const [name, setName] = useState('');
@@ -336,11 +263,9 @@ export default function ContactNative() {
       className={`${styles.contact} ${open ? styles.open : ''} ${panelIn ? styles.in : ''}`}
       aria-label="Contact"
       data-wk-smoke
-      style={{ ['--poster' as string]: `url('${POSTER_URL}')`, ['--pp' as string]: 0 }}
+      style={{ ['--pp' as string]: 0, ['--cam' as string]: 0, ['--rush' as string]: 0, ['--land' as string]: 0, ['--pull' as string]: 0 }}
     >
-      {/* the lake as a picture, under the live canvas: nothing is ever empty while the scene starts */}
-      <div className={styles.poster} aria-hidden />
-      <canvas ref={canvasRef} className={`${styles.stage} ${show ? styles.stageOn : ''}`} aria-hidden />
+      <ContactBackdrop ppRef={ppRef} active={backdropOn} mobile={mobile} lake={LAKE_URL} garden={GARDEN_URL} />
       <div className={`${styles.shade} ${show ? styles.stageOn : ''}`} aria-hidden />
 
       {open && (
