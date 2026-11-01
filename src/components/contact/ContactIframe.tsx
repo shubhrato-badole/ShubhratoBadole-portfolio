@@ -3,29 +3,34 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useReveal } from '../reveal/NextReveal';
 import { smooth, scrollToTarget } from '../reveal/smooth';
-import styles from './contact.module.css';
+import styles from './contactIframe.module.css';
+import { forceStatic } from './contactPlan';
 
 /* The contact scene is a finished, separate app (public/contact-scene/). This section only hosts it.
 
-   ONE iframe, ONE URL, NEVER remounted. (The old version switched the iframe's `src` for the "Let's talk" button path,
-   which threw away a 9 MB WebGL scene that might already be loaded and rebooted it from zero: that was the blank screen.)
+   ONE WebGL scene at a time, always. (An earlier version pre-warmed a second copy for the "Let's talk" button; two 9 MB scenes
+   alive together is exactly what makes weak phones stutter or reload the tab, so that is gone.)
 
-   Two ways in, two scenes (as before), but neither one can show a blank screen any more:
-   · SCROLL path   : the LAKE scene (?start=lake). Work lifts away -> lake window -> ring fills -> the window opens. The
-                     scene is told to fly to the form THE MOMENT THE RING FILLS, so its route change + camera flight overlap
-                     the 1 s window opening instead of starting after it (that gap was the pause in the recording).
-   · BUTTON path   : "Let's talk" from ANY section -> the scene covers the screen where you are and plays its OWN opening
-                     animation (the circle opening from the middle); no scrolling down first. That scene (?wait=1) is PRE-WARMED in the background once the lake is
-                     ready, so the circle starts the moment you arrive. If it is not ready yet, the lake picture stays on
-                     screen (never black) and the circle starts as soon as the scene reports "form-ready".
+   Two ways in:
+   · SCROLL path : the LAKE scene (?start=lake). Work lifts away -> lake window -> ring fills -> the window opens. The scene is
+                   told to fly to the form THE MOMENT THE RING FILLS, so its camera flight overlaps the window opening.
+   · BUTTON path : "Let's talk" from ANY section -> the lake scene is dropped and the form scene (?wait=1) boots in its place,
+                   covered by a dark fade + the lake picture (never a blank screen); when it reports "form-ready" it plays its
+                   own circle opening. Its files are already in the browser cache from the lake, so it boots fast.
    · Nothing is ever black: the lake POSTER is under everything and a live scene only appears when it is ready.
-   · LOADING       : starts early enough to be ready: on the first real scroll, on hover/focus/touch of any Contact link,
-                     when the section is ~5 screens away, or after the page has been idle for a while. */
+
+   NOT LAGGING (the rule for this file): the scene is a heavy download + compile that runs on the SAME main thread as the page,
+   so it must never start while the visitor is scrolling.
+   · LOADING : starts only when the visitor is about 2-3 screens from the section AND has stopped scrolling for a moment (never
+               at page load or while the hero / opening play); or at once on hover / touch of a Contact link or a button click.
+   · RUNNING : the scene is fully stopped (0 % GPU, 0 % CPU) unless somebody can see it (lake near / section visible).
+   · It adapts by itself: scene.html measures its own fps and steps its quality down (or freezes the picture) if the device
+               cannot keep up; that decision is remembered, so the next visit starts on the right tier. */
 
 /* WHICH SCENE TO SHOW. Change this one word to switch, nothing else:
-     'own' -> scene-own.html : the new self-contained scene (one small file, no external assets)
-     'old' -> scene.html     : the original scene, still in the folder, untouched */
-const SCENE: 'own' | 'old' = 'own';
+     'real' -> scene.html     : the real scene (the one in your recordings), with quality tiers + watchdog
+     'own'  -> scene-own.html : the small self-contained scene, kept as a spare */
+const SCENE = 'real' as 'real' | 'own';
 const SCENE_FILE = SCENE === 'own' ? 'scene-own.html' : 'scene.html';
 const POSTER_URL = SCENE === 'own' ? '/contact-scene/lake-poster-own.jpg' : '/contact-scene/lake-poster.jpg';
 const SRC_LAKE = `/contact-scene/${SCENE_FILE}?start=lake`;
@@ -36,21 +41,17 @@ const FRONT_Z = 1;
 const SAFETY_MS = 6000;
 /* Button / dock "Contact" path only: the lake picture stays on screen until the scene reports ready; this is the
    last-resort cap (the scene is a single small file now, so it is normally ready in well under a second). */
-const DIRECT_WAIT_MS = SCENE === 'own' ? 10000 : 60000; // the old scene is ~9 MB, give it much longer
-/* start loading the scene after the page has been idle this long (ms) even if the visitor has not scrolled yet */
-const IDLE_PRELOAD_MS = 7000;
-/* pre-warm the button path's scene this long after the lake is ready (so the two boots never overlap) */
-const WARM_FORM_MS = 800;
+const DIRECT_WAIT_MS = SCENE === 'own' ? 10000 : 60000; // the real scene is ~9 MB, give it much longer
+/* the scene may only start loading once the visitor has stopped scrolling for this long (ms) */
+const QUIET_MS = 700;
+/* how far away (in screens) the section may be before the scene is allowed to start loading. Short on purpose: the scene is
+   a heavy download + compile and must not start while the visitor is still on the hero / opening / other sections. */
+const REACH_MARGIN = { early: '250% 0px', near: '200% 0px', late: '150% 0px' } as const;
 
 const isContactLink = (el: EventTarget | null) =>
   !!(el as Element | null)?.closest?.('a[href="#contact"], a[href="/#contact"]');
 
-type IdleWindow = Window & {
-  requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
-  cancelIdleCallback?: (id: number) => void;
-};
-
-export default function ContactIframe() {
+export default function ContactIframe({ reach = 'near' }: { reach?: keyof typeof REACH_MARGIN }) {
   const rootRef = useRef<HTMLElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null); // the lake (scroll path)
   const formRef = useRef<HTMLIFrameElement>(null); // the circle-opening scene (button path)
@@ -64,13 +65,13 @@ export default function ContactIframe() {
   const [activeRaw, setActive] = useState(false); // section fully in view
   const [seenRaw, setSeen] = useState(false); // any part of the section is on screen
   const [giveUp, setGiveUp] = useState(false); // the scene never reported ready: show it anyway
-  const [formWarm, setFormWarm] = useState(false); // boot the button path's scene in the background
   const [formLoaded, setFormLoaded] = useState(false); // its iframe document has loaded
   const [formReady, setFormReady] = useState(false); // it is booted and waiting for "enter"
   const [entered, setEntered] = useState(false); // it has been told to play the circle opening
   const [jumped, setJumped] = useState(false); // the page position has been moved to the contact page (while covered)
   const [settled, setSettled] = useState(false); // the contact page is where it should be: from now on the page can scroll over it
-  const showForm = direct || formWarm;
+  const showForm = direct; // the button path's scene boots only when the button is used (never pre-warmed)
+  const posterOn = load || direct || lakeNear || lakeVisible || phase !== 'reveal';
   /* a second "Let's talk" after the circle already played: a fresh scene plays it again (the lake picture covers meanwhile) */
   const lastRun = useRef(directRun);
   useEffect(() => {
@@ -99,34 +100,38 @@ export default function ContactIframe() {
     [],
   );
 
-  /* ---------- 1. start loading the scene early enough ---------- */
+  /* ---------- 1. start loading the scene: near enough AND never while the visitor is scrolling ---------- */
   useEffect(() => {
     if (load) return;
     const start = () => setLoad(true);
-    const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-    const saveData = !!conn?.saveData;
-    const w = window as IdleWindow;
 
-    const onScroll = () => {
-      if (window.scrollY > window.innerHeight * 0.6) start();
+    let lastScroll = performance.now();
+    let quietTimer = 0;
+    let wanted = false;
+    /* "wanted" turns into "start" only after QUIET_MS without any scrolling: the download + compile of the scene
+       share the main thread with the page, so they must not land in the middle of a scroll */
+    const arm = () => {
+      window.clearTimeout(quietTimer);
+      quietTimer = window.setTimeout(() => (performance.now() - lastScroll < QUIET_MS ? arm() : start()), QUIET_MS);
     };
+    const want = () => {
+      if (wanted) return;
+      wanted = true;
+      arm();
+    };
+    const onScroll = () => {
+      lastScroll = performance.now();
+    };
+    /* a visitor reaching for a Contact link / button is a clear signal: no waiting */
     const onIntent = (e: Event) => {
       if (isContactLink(e.target)) start();
     };
-    let idleId = 0;
-    let timer = 0;
-    if (!saveData) {
-      timer = window.setTimeout(() => {
-        if (w.requestIdleCallback) idleId = w.requestIdleCallback(start, { timeout: 4000 });
-        else start();
-      }, IDLE_PRELOAD_MS);
-    }
 
     const near = new IntersectionObserver(
       ([e]) => {
-        if (e.isIntersecting) start();
+        if (e.isIntersecting) want();
       },
-      { rootMargin: '500% 0px' },
+      { rootMargin: REACH_MARGIN[reach] },
     );
     if (rootRef.current) near.observe(rootRef.current);
 
@@ -136,8 +141,7 @@ export default function ContactIframe() {
     document.addEventListener('touchstart', onIntent, { passive: true });
     window.addEventListener('portfolio:open-contact', start);
     return () => {
-      window.clearTimeout(timer);
-      if (idleId) w.cancelIdleCallback?.(idleId);
+      window.clearTimeout(quietTimer);
       near.disconnect();
       window.removeEventListener('scroll', onScroll);
       document.removeEventListener('pointerover', onIntent);
@@ -145,7 +149,7 @@ export default function ContactIframe() {
       document.removeEventListener('touchstart', onIntent);
       window.removeEventListener('portfolio:open-contact', start);
     };
-  }, [load]);
+  }, [load, reach]);
 
   /* a button / link opened Contact directly: nothing to wait for, start now */
   useEffect(() => {
@@ -202,21 +206,7 @@ export default function ContactIframe() {
     return () => window.clearTimeout(t);
   }, [post, loaded, lakeReady, direct, open, opening, lakeNear, seen]);
 
-  /* ---------- 4b. BUTTON path: the circle-opening scene ---------- */
-  /* pre-warm it once the lake is ready (skipped on low-memory / data-saver devices: there it boots on click, behind the picture) */
-  useEffect(() => {
-    if (formWarm || direct || engaged || !lakeReady) return;
-    const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
-    if (nav.connection?.saveData || (nav.deviceMemory && nav.deviceMemory < 4)) return;
-    const t = window.setTimeout(() => setFormWarm(true), WARM_FORM_MS);
-    return () => window.clearTimeout(t);
-  }, [formWarm, direct, engaged, lakeReady]);
-
-  /* while it only waits in the background it runs at ~2 fps */
-  useEffect(() => {
-    if (formReady && !direct) postForm({ type: 'pause' });
-  }, [postForm, formReady, direct]);
-
+  /* ---------- 4b. BUTTON path: the circle-opening scene (booted only when the button is used) ---------- */
   /* "Let's talk" clicked from ANY section: the scene covers the screen where you are and plays the circle opening, no scroll
      down first. It starts as soon as the scene is ready (the lake picture covers the page until then, never black);
      after a safety delay it starts anyway. */
@@ -266,10 +256,13 @@ export default function ContactIframe() {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return;
       if (e.source !== frameRef.current?.contentWindow && e.source !== formRef.current?.contentWindow) return;
-      const d = e.data as { source?: string; type?: string; dy?: number; id?: string; touch?: boolean } | null;
+      const d = e.data as { source?: string; type?: string; dy?: number; id?: string; touch?: boolean; action?: string; reason?: string } | null;
       if (!d || d.source !== 'contact-scene') return;
 
-      if (d.type === 'lake-ready') {
+      if (d.type === 'perf') {
+        /* a browser with no WebGL at all: pictures instead (every other slow-device case is handled inside the scene itself) */
+        if (d.action === 'give-up' && d.reason === 'no-webgl') forceStatic();
+      } else if (d.type === 'lake-ready') {
         setLakeReady(true);
       } else if (d.type === 'form-ready') {
         setFormReady(true);
@@ -303,8 +296,9 @@ export default function ContactIframe() {
       aria-label="Contact"
       style={{ ['--poster' as string]: `url('${POSTER_URL}')` }}
     >
-      {/* the lake, as a picture, under the live scenes: there is never an empty / black window while a scene loads */}
-      <div className={styles.poster} aria-hidden />
+      {/* the lake, as a picture, under the live scenes: there is never an empty / black window while a scene loads.
+          Not mounted until the section is actually near, so it costs nothing (no full-screen layer, no image decode) while the visitor is on the hero / opening / Work. */}
+      {posterOn && <div className={styles.poster} aria-hidden />}
       {/* button path: the page fades straight to dark where you are and the circle opens out of it (no picture first).
           Only if the scene takes longer than ~1.5 s does the lake picture fade in over the dark, so it is never a long blank wait. */}
       {direct && !entered && (
