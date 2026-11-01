@@ -103,15 +103,20 @@ function createRing(): Ring | null {
 const tween = (from: number, to: number, duration: number, draw: (v: number) => void, ease: string) =>
   new Promise<void>((res) => { const s = { v: from }; gsap.to(s, { v: to, duration, ease, onUpdate: () => draw(s.v), onComplete: () => res() }); });
 
+/* true while any ring is on screen: lets a second caller (Contact) know the screen is already covered, so only ONE ring ever plays */
+let ringsRunning = 0;
+export const isRingRunning = () => ringsRunning > 0;
+
 /** close the ring over the page, run onCovered() while covered, then open it again. Never rejects. */
 export async function runRingTransition(onCovered: () => void | Promise<void>, opts: { close?: number; open?: number } = {}) {
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const ring = reduce ? null : createRing();
   if (!ring) { try { await onCovered(); } catch { /* keep going */ } return; }
+  ringsRunning++;
   try {
     await tween(0, 1, opts.close ?? 1.15, ring.draw, RING.EASE);
     try { await onCovered(); } catch { /* the cover opens anyway */ }
     await new Promise((r) => setTimeout(r, 120));
     await tween(1, 0, opts.open ?? 1.9, ring.draw, RING.EASE);
-  } finally { ring.destroy(); }
+  } finally { ringsRunning--; ring.destroy(); }
 }
