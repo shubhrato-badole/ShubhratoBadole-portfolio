@@ -36,6 +36,7 @@ export type RevealEngineOptions = {
   onOpen: () => void; // the window is fully open, the next page takes over
   onLakeVisible: (visible: boolean) => void; // part of the lake is on screen (its iframe should be shown)
   onLakeNear: (near: boolean) => void; // the lake is about to be needed (it should be running at full speed)
+  onProgress?: (p: number) => void; // the ring's fill 0..1 while the visitor pulls (and while it drains): the next page can move WITH the pull
 };
 
 export type RevealEngine = {
@@ -62,6 +63,7 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
     armed: false,
     lastInput: 0,
     progress: 0,
+    lastP: -1,
     exp: { v: 0 }, // 0..1, how far the window has opened (animated by GSAP after the ring is full)
     height: 0, // overlay height = the extra scroll room under the panel
     lakeReady: false,
@@ -188,6 +190,10 @@ export function createRevealEngine(o: RevealEngineOptions): RevealEngine {
     }
     st.progress = clamp(st.n / threshold);
     if (bar) bar.style.strokeDashoffset = String(circumference * (1 - st.progress));
+    if (Math.abs(st.progress - st.lastP) > 0.002) {
+      st.lastP = st.progress;
+      o.onProgress?.(st.progress);
+    }
     if (!st.fired && st.n >= threshold) fire();
 
     /* 3. the window under the panel: its top edge rises from the panel's bottom edge to just above the screen */
