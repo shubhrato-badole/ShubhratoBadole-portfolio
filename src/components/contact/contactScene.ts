@@ -19,11 +19,15 @@ export type ContactScene = {
   resize: () => void;
   renderOnce: () => void;
   destroy: () => void;
+  /** page scroll in px, so the garden can drift with the page (parallax); optional */
+  setScroll?: (px: number) => void;
 };
 
-type Opts = {
+export type Opts = {
   onReady?: () => void;
   reduceMotion?: boolean;
+  /** 3D scene only: try to load /contact-models/{tree,chair,rock}.glb (downloaded open-licence models) */
+  overrides?: boolean;
   lowPower?: boolean; // phones / small devices: lower resolution, fewer sprites, 30 fps
 };
 
@@ -33,7 +37,7 @@ const VERT_FULL = `
 attribute vec2 aPos;
 void main(){ gl_Position = vec4(aPos * 2.0 - 1.0, 0.0, 1.0); }`;
 
-const FRAG_LAKE = `
+export const FRAG_LAKE = `
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
 #else
