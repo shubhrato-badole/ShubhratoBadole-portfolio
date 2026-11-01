@@ -2,8 +2,8 @@
 <html lang="en" translate="no" data-theme="dark">
 <head>
 <!-- ===== portfolio embed layer (added; everything below is ours, not part of the original build) ===== -->
-<meta name="scene-build" content="v5">
-<script type="importmap">{ "imports": { "/contact-scene/_nuxt/DL4QAMwX.js": "/contact-scene/_nuxt/DL4QAMwX.v5.js" } }</script>
+<script type="importmap">{"imports":{"/contact-scene/_nuxt/T7ii45zO.js":"/contact-scene/_nuxt/T7ii45zO.v6.js","/contact-scene/_nuxt/C_cUlCaF.js":"/contact-scene/_nuxt/C_cUlCaF.v6.js","/contact-scene/_nuxt/DL4QAMwX.js":"/contact-scene/_nuxt/DL4QAMwX.v6.js"}}</script>
+<meta name="scene-build" content="v6">
 <style>
   /* the portfolio has its own nav, so the original top bar is hidden */
   header.header, nav.mobile-nav { display: none !important; } /* + the small-screen menu pill */
@@ -11,53 +11,85 @@
   .loader__actions { opacity: 0 !important; pointer-events: none !important; }
   /* the form only builds an email (mailto:), which cannot carry a file, so the attach button is hidden */
   .contact-form__attach { display: none !important; }
-  /* DARK instead of white: the scene's own dark theme (cookie below) gives the loader and the area around the
-     opening ring the original's dark colour. */
   /* no landing screen: nothing is shown while the scene waits; it goes straight into the opening ring */
   .loader { opacity: 0 !important; }
-  .loader__logo { display: none !important; }                      /* no name on the loader */
-  .loader__bar { background: rgba(255, 255, 255, 0.16) !important; } /* progress track readable on dark */
+  .loader__logo { display: none !important; }
+  .loader__bar { background: rgba(255, 255, 255, 0.16) !important; }
   /* the scene's own AI assistant (orb + speech bubble + chat) is removed: the portfolio has its own assistant */
   .ai-btn, .ai-bubble, .ai-overlay { display: none !important; }
   /* LAKE MODE (?start=lake): only the 3D lake is shown (no page text / UI) until the portfolio opens the contact page */
   html.lake-mode .ui { visibility: hidden !important; }
-  /* ===== BLUE accent (the hero's cobalt #4C6FFF, same family as the "Let's talk" button) =====
-     --primary drives: the title arrow, the "Send it" glow, focus colour, caret, selection, list numbers.
-     To go back to purple, delete this one block. (The 3D tree / lake keep their own purple art direction.) */
-  .contact-window {
-    --primary: #4c6fff; --primary-rgb: 76, 111, 255;
-    --primary-active: #3a57e8; --primary-active-rgb: 58, 87, 232;
-    /* the button's 1px outline gradient: identical to the hero's .gb--blue */
-    --btn-stroke-colors: #1b2a8f 0%, #4c6fff 4%, #e8eeff 31%, #e8eeff 60%, #b9c6ff 85%, #4c6fff 100%;
-  }
-  .contact-window .c-hero__title-sub-3-icon { color: #4c6fff; }
-  /* "Send it": same body tint, same glow and same smoky wave colours as the blue "Let's talk" button */
-  .contact-window .button.button--primary { background-color: rgba(76, 111, 255, .07); }
-  .contact-window .button.button--primary .button__gradient { filter: blur(6px) hue-rotate(-34deg) saturate(1.08); } /* purple waves -> cobalt waves */
-  /* tactile press, like the hero's buttons */
+  /* tactile press */
   .contact-window .button:not(:disabled):active { transform: scale(.965); transition-duration: .12s; }
   .contact-window .button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-  /* "What I can do" is a plain list now (nothing to choose) */
-  .radio-item-wrapper { cursor: default !important; }
-  .radio-item-wrapper:hover { color: var(--foreground) !important; }
+  /* phones: the form scrolls under the finger with the browser's own (smooth) touch scrolling, never chains into the page */
+  html, body { overscroll-behavior: none; }
+  .smooth-scroll { -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+  /* WebGL frozen / lost (very weak device): the picture stays, the form keeps working */
+  html.gl-lost body, html.gl-frozen.gl-bg body { background: #120a26 var(--gl-poster, none) center bottom / cover no-repeat; }
 </style>
 <script>
-/* PERFORMANCE: inside the portfolio this scene shares ONE main thread with the page, and it was rendering at the full Retina
-   pixel ratio (2x = ~5.4 MP on a MacBook). Capping the ratio the scene sees at 1.5 cuts the pixels it has to draw by ~44% with
-   no visible difference on this soft, bloomy night scene. Change SCENE_MAX_DPR to taste (2 = the old behaviour).
-   Only applies when embedded; the DOM text / form stay perfectly crisp (CSS pixels are not affected). */
+/* ============================ QUALITY TIER (chosen BEFORE the engine boots) ============================
+   The engine has its own tiers (high / low); a third, lighter one ("lite") was added to it. The tier is picked here from
+   what the device can do, and remembered if the watchdog below had to step down on this device before.
+     ?tier=lite|low|high   force one (testing)
+     low : normal (desktops, strong phones)             high : only with ?tier=high
+     lite : weak phones, low memory, data-saver, old GPUs: no bloom, no MSAA, 1x pixels, far less grass / leaves / fireflies */
 (function () {
-  var SCENE_MAX_DPR = 1.5;
+  var ORDER = { lite: 0, low: 1, high: 2 };
+  function qs(n) { var m = new RegExp('[?&]' + n + '=([a-z]+)').exec(location.search); return m && m[1]; }
+  var forced = qs('tier');
+  var nav = navigator, mem = nav.deviceMemory || 0, cores = nav.hardwareConcurrency || 0;
+  var coarse = false; try { coarse = matchMedia('(pointer: coarse)').matches; } catch (e) {}
+  var save = !!(nav.connection && nav.connection.saveData);
+  var gpu = '';
   try {
-    if (window.parent !== window && (window.devicePixelRatio || 1) > SCENE_MAX_DPR) {
-      Object.defineProperty(window, 'devicePixelRatio', { configurable: true, get: function () { return SCENE_MAX_DPR; } });
+    var c = document.createElement('canvas'), g = c.getContext('webgl2') || c.getContext('webgl');
+    if (g) {
+      var d = g.getExtension('WEBGL_debug_renderer_info');
+      gpu = String(g.getParameter(d ? d.UNMASKED_RENDERER_WEBGL : g.RENDERER) || '');
+      var lose = g.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext();
+    }
+  } catch (e) {}
+  var weak = /swiftshader|llvmpipe|basic render|mali-4|mali-t|mali-g(31|51|52)\b|adreno \(?tm\)? ?[2-5]\d\d\b|powervr|videocore|vivante/i.test(gpu);
+  var integrated = /intel|radeon\(tm\) graphics|vega \d+ graphics/i.test(gpu) && !/arc/i.test(gpu);
+  var tier;
+  if (forced && ORDER[forced] !== undefined) tier = forced;
+  else {
+    if (save || (mem && mem <= 2) || (cores && cores <= 2) || weak) tier = 'lite';
+    else if (coarse) tier = ((mem && mem <= 4) || (cores && cores <= 4)) ? 'lite' : 'low';
+    else tier = 'low'; /* desktop too: the engine's 'low' tier looks almost the same and costs far less; ?tier=high forces the top one */
+    /* a step-down remembered from an earlier visit only ever LOWERS the tier */
+    try {
+      var o = JSON.parse(localStorage.getItem('contact:tier') || 'null');
+      if (o && Date.now() - o.t < 7 * 864e5) { var v = o.v === 'poster' ? 'lite' : o.v; if (ORDER[v] !== undefined && ORDER[v] < ORDER[tier]) tier = v; }
+    } catch (e) {}
+  }
+  window.__TIER = tier;
+  window.__NOGL = !gpu && !(function () { try { var c2 = document.createElement('canvas'); return !!(c2.getContext('webgl2') || c2.getContext('webgl')); } catch (e) { return false; } })();
+  try { localStorage.setItem('emotion:quality', tier); } catch (e) {}
+})();
+</script>
+<script>
+/* PERFORMANCE: inside the portfolio this scene shares ONE main thread with the page. Pixels are the biggest cost, so the pixel
+   ratio the scene sees is capped: 1.5 on desktop, 1.25 on phones, 1 on the lite tier. Only applies when embedded; the DOM text /
+   form stay perfectly crisp (CSS pixels are not affected). */
+(function () {
+  var cap = 1.5;
+  try { if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) cap = 1.25; } catch (e) {}
+  if (window.__TIER === 'lite') cap = 1;
+  window.__dprCap = cap;
+  var real = window.devicePixelRatio || 1;
+  try {
+    if (window.parent !== window) {
+      Object.defineProperty(window, 'devicePixelRatio', { configurable: true, get: function () { return Math.min(real, window.__dprCap); } });
     }
   } catch (e) {}
 })();
 </script>
 <script>
 (function () {
-  try { console.info('[contact-scene] build v5'); } catch (e) {}
+  try { console.info('[contact-scene] build v6, tier ' + window.__TIER); } catch (e) {}
   /* the scene reads its light / dark theme from a cookie (default: light = white). Dark = the original's dark loader. */
   try { if (!/(?:^|; )theme=dark\b/.test(document.cookie)) document.cookie = 'theme=dark; path=/; max-age=31536000; SameSite=Lax'; } catch (e) {}
 
@@ -74,23 +106,100 @@
   /* the scene's router must see the page it was built as: /contact for the form, "/" for the lake */
   try { history.replaceState(history.state, '', (LAKE ? '/' : '/contact') + location.search); } catch (e) {}
 
-  /* while the page says "pause" (the lake hidden behind Work, or the contact page covered by Work) the scene renders at ~2 fps */
+  /* while the page says "pause" (the lake hidden behind Work, or the contact page covered by Work) the scene is held:
+     fully stopped on every tier: no GPU and no CPU work at all while nobody can see it) */
+  var rootEl = document.documentElement;
+  lake.frozen = false;
   if (window.parent !== window) {
     var rafReal = window.requestAnimationFrame.bind(window), cafReal = window.cancelAnimationFrame.bind(window);
     var held = {}, heldSeq = 1e9, heldTimer = 0;
+    var TIERN = window.__TIER || 'low';
+    var HOLD_MS = 0; /* paused = fully stopped: no GPU work, no CPU work, nothing that can make the page hitch */
+    var FROZEN_MS = 34; /* GL frozen: the form / text keep animating at ~30 fps, the GPU is idle */
     var flushHeld = function () { var q = held; held = {}; Object.keys(q).forEach(function (k) { rafReal(q[k]); }); };
+    var holdMs = function () { return lake.paused ? HOLD_MS : (lake.frozen ? FROZEN_MS : 0); };
+    var rearm = function () {
+      clearInterval(heldTimer); heldTimer = 0;
+      var ms = holdMs();
+      if (ms > 0 && Object.keys(held).length) heldTimer = setInterval(function () { if (lake.paused || lake.frozen) flushHeld(); }, ms);
+    };
     window.requestAnimationFrame = function (cb) {
-      if (!lake.paused) return rafReal(cb);
+      if (!lake.paused && !lake.frozen) return rafReal(cb);
       var id = ++heldSeq; held[id] = cb;
-      if (!heldTimer) heldTimer = setInterval(function () { if (lake.paused) flushHeld(); }, 500);
+      if (!heldTimer) rearm();
       return id;
     };
     window.cancelAnimationFrame = function (id) { if (id > 1e9) delete held[id]; else cafReal(id); };
     var setPaused = function (p) {
       if (p === lake.paused) return;
       lake.paused = p;
-      if (!p) { clearInterval(heldTimer); heldTimer = 0; flushHeld(); }
+      clearInterval(heldTimer); heldTimer = 0;
+      if (!p) { flushHeld(); if (typeof wdStart === 'function') wdStart(2500); } else rearm();
     };
+
+    /* ---- the picture stops, the page keeps working ---- */
+    var freezeGL = function (reason) {
+      if (lake.frozen) return;
+      lake.frozen = true;
+      var noop = function () {};
+      [window.WebGL2RenderingContext, window.WebGLRenderingContext].forEach(function (C) {
+        if (!C) return;
+        ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced', 'drawRangeElements', 'clear', 'clearBufferfv',
+         'clearBufferiv', 'clearBufferuiv', 'clearBufferfi', 'blitFramebuffer'].forEach(function (n) { if (C.prototype && C.prototype[n]) C.prototype[n] = noop; });
+      });
+      rootEl.classList.add('gl-frozen');
+      rearm();
+      send({ type: 'perf', action: 'frozen', reason: reason });
+    };
+    document.addEventListener('webglcontextlost', function () {
+      /* the phone took the GPU memory back: keep the poster picture, the form still works */
+      rootEl.style.setProperty('--gl-poster', 'url(/contact-scene/' + (lake.on ? 'lake-poster.jpg' : 'garden-poster.jpg') + ')');
+      rootEl.classList.add('gl-lost');
+      remember('poster');
+      send({ type: 'perf', action: 'give-up', reason: 'context-lost' });
+    }, true);
+
+    /* ---- WATCHDOG: if the scene cannot hold ~25 fps on this device it steps down by itself, in place (no reload) ----
+       1) fps low twice in a row (2 s windows) -> pixel ratio 1 now, and the next visit starts on a lower tier
+       2) still low three more windows       -> the picture freezes (GPU idle), the form keeps working
+       It only measures while the scene is running (not held), and ignores the first seconds after each resume.
+       ?wd=0 switches it off (tests). */
+    var WD_OFF = /[?&]wd=0(&|$)/.test(location.search);
+    try { if (/[?&]wd=0(&|$)/.test(window.parent.location.search)) WD_OFF = true; } catch (e) {} /* same-origin page URL ?wd=0 works too */
+    var wd = { on: false, t: 0, frames: 0, slow: 0, skipUntil: 0, stage: 0 };
+    var remember = function (v) { try { localStorage.setItem('contact:tier', JSON.stringify({ v: v, t: Date.now() })); } catch (e) {} };
+    var wdStart = function (delay) {
+      if (WD_OFF) return;
+      wd.on = true; wd.t = 0; wd.frames = 0; wd.slow = 0; wd.skipUntil = performance.now() + (delay || 3000);
+    };
+    var wdTick = function (ts) {
+      rafReal(wdTick);
+      if (!wd.on || lake.paused || lake.frozen || document.hidden || ts < wd.skipUntil) { wd.t = 0; return; }
+      if (!wd.t) { wd.t = ts; wd.frames = 0; return; }
+      wd.frames++;
+      var dt = ts - wd.t;
+      if (dt < 2000) return;
+      var fps = wd.frames * 1000 / dt;
+      wd.t = ts; wd.frames = 0;
+      var limit = TIERN === 'lite' || wd.stage > 0 ? 18 : 25;
+      if (fps >= limit) { wd.slow = 0; return; }
+      wd.slow++;
+      if (wd.stage === 0 && wd.slow >= 2) {
+        wd.stage = 1; wd.slow = 0;
+        window.__dprCap = 1;
+        try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+        /* one bad session only lowers the tier for next time; "no 3D at all" is remembered only if the picture had to freeze */
+        if (TIERN !== 'lite') remember(TIERN === 'high' ? 'low' : 'lite');
+        send({ type: 'perf', action: 'downgrade', from: TIERN, fps: Math.round(fps) });
+      } else if (wd.stage === 1 && wd.slow >= 3) {
+        wd.stage = 2;
+        remember('poster');
+        freezeGL('slow');
+        send({ type: 'perf', action: 'give-up', reason: 'slow', fps: Math.round(fps) });
+      }
+    };
+    if (!WD_OFF) rafReal(wdTick);
+    if (!LAKE) wdStart(14000); /* form-only mode: skip the load */
   }
 
   var host = window.parent !== window ? window.parent : null;
@@ -100,8 +209,21 @@
     host.postMessage(msg, location.origin);
   }
 
+  /* ---- small guards: no network chatter, no console noise ---- */
+  /* the removed voice assistant probes /contact-scene/_off/tts-speak with a HEAD request on every start; answer it here */
+  try {
+    var fetchReal = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      var u = typeof input === 'string' ? input : (input && input.url) || '';
+      if (u.indexOf('/contact-scene/_off/') !== -1) return Promise.resolve(new Response('', { status: 503 }));
+      return fetchReal(input, init);
+    };
+  } catch (e) {}
+  try { if (navigator.vibrate) navigator.vibrate = function () { return false; }; } catch (e) {}
+  /* a browser with no WebGL at all: tell the page, it switches to the picture version */
+  if (window.__NOGL) setTimeout(function () { send({ type: 'perf', action: 'give-up', reason: 'no-webgl' }); }, 0);
+
   /* dark only for the loader and the opening ring; once the ring has opened, the scene goes back to its usual colours */
-  var rootEl = document.documentElement;
   function startBack() {
     var go = function () {
       setTimeout(function () {
@@ -169,10 +291,25 @@
 
   /* ---- lake mode: the engine's own home view minus the purple particle ring and the page text ---- */
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  /* The engine reads window.__NUXT__ (defined further down this page) the moment its file is evaluated. When the file was
+     already cached, importing it from here ran it BEFORE the parser reached that line, and the lake failed with
+     "Cannot read properties of undefined (reading 'app')". Wait until the page is fully parsed, and try again if it still fails. */
+  function pageParsed() {
+    /* 'interactive' = the whole page has been parsed, so the inline line that defines window.__NUXT__ has already run
+       (the engine deletes that object again once it has started, so it must not be waited for) */
+    return document.readyState !== 'loading'
+      ? Promise.resolve()
+      : new Promise(function (res) { document.addEventListener('DOMContentLoaded', function () { res(); }, { once: true }); });
+  }
   async function setUpLake() {
     var hs = null, world = null;
     try {
-      var mod = await import('/contact-scene/_nuxt/T7ii45zO.js');
+      await pageParsed();
+      var mod = null;
+      for (var attempt = 0; attempt < 3 && !mod; attempt++) {
+        try { mod = await import('/contact-scene/_nuxt/T7ii45zO.js'); }
+        catch (err) { if (attempt === 2) throw err; await sleep(250 * (attempt + 1)); }
+      }
       world = mod.b();
       for (var i = 0; i < 900 && !hs; i++) {
         var m = world.manager.master && world.manager.master.value;
@@ -203,13 +340,14 @@
     for (var k = 0; k < 900 && !world.manager.state.introPlayed; k++) await sleep(200);
     await sleep(400);
     send({ type: 'lake-ready' });
+    if (typeof wdStart === 'function') wdStart(3000);
     warmUp();
   }
   /* The contact page waits for every font (up to 3 s) before it starts its entrance, and its code is only imported when the
      route changes. Doing both NOW, while the lake sits hidden behind Work, removes that wait from the moment that matters. */
   function warmUp() {
     try { Array.prototype.forEach.call(document.fonts, function (f) { f.load().catch(function () {}); }); } catch (e) {}
-    try { import('/contact-scene/_nuxt/DL4QAMwX.js').catch(function () {}); } catch (e) {}   /* mapped to the v5 file by the import map */
+    try { import('/contact-scene/_nuxt/DL4QAMwX.v6.js').catch(function () {}); } catch (e) {}
   }
   if (LAKE) setUpLake();
 
@@ -270,6 +408,35 @@
       send({ type: 'wheel', dy: dy });
     }
   }, { capture: true, passive: false });
+
+  /* 3b. the same hand-off for a FINGER. Before this only the mouse wheel was handed to the page, so on a phone the form
+         trapped your swipe: you could not scroll up out of Contact, and swipes at the end of the form did nothing.
+         At the top / bottom of the form a swipe now moves the portfolio page instead (the page sends it through the
+         same smooth scroller as everything else). Inside the form (middle) the browser's own touch scrolling is used. */
+  var touchY = 0;
+  window.addEventListener('touchstart', function (e) {
+    if (e.touches.length === 1) touchY = e.touches[0].clientY;
+  }, { capture: true, passive: true });
+  window.addEventListener('touchmove', function (e) {
+    if (!host || lake.on || e.touches.length !== 1) return;
+    var y = e.touches[0].clientY, dy = touchY - y; /* > 0: finger moves up = scroll down */
+    touchY = y;
+    if (!dy) return;
+    var t = e.target;
+    if (t && t.closest) {
+      if (t.closest('[data-lenis-prevent]')) return;
+      var ta = t.closest('textarea');
+      if (ta && ta.scrollHeight > ta.clientHeight + 1) return; /* a long message box scrolls itself */
+    }
+    if (!scroller || !scroller.isConnected) scroller = document.querySelector('.smooth-scroll');
+    if (!scroller) return;
+    var atTop = scroller.scrollTop <= 1;
+    var atEnd = scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - 1;
+    if ((dy < 0 && atTop) || (dy > 0 && atEnd)) {
+      if (e.cancelable) e.preventDefault();
+      send({ type: 'wheel', dy: dy, touch: true });
+    }
+  }, { capture: true, passive: false });
 })();
 </script>
 <!-- ===== end embed layer ===== -->
@@ -290,14 +457,14 @@
 <link rel="stylesheet" href="/contact-scene/_nuxt/InfoLabel.DqyvPKau.css" crossorigin>
 <link rel="stylesheet" href="/contact-scene/_nuxt/contact.DbI0CKbH.css" crossorigin>
 
-<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/T7ii45zO.js">
+<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/T7ii45zO.v6.js">
 <link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/basis_transcoder.o4Hde_L7.js">
 <link rel="preload" as="font" crossorigin href="/contact-scene/fonts/PPNeueMontreal-Medium.woff2">
 <link rel="preload" as="font" crossorigin href="/contact-scene/fonts/IBMPlexMono-Medium-Latin1.woff2">
 <link rel="preload" as="font" crossorigin href="/contact-scene/fonts/EmotionSerif-Light.woff2">
 <link rel="preload" as="font" crossorigin href="/contact-scene/fonts/EmotionSerif-LightItalic.woff2">
 <link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/BZDeO1lC.js">
-<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/DL4QAMwX.v5.js">
+<link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/DL4QAMwX.v6.js">
 <link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/BGBHjvBH.js">
 <link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/CV6D6F_8.js">
 <link rel="modulepreload" as="script" crossorigin href="/contact-scene/_nuxt/D33KF0pv.js">
@@ -305,7 +472,7 @@
 <link rel="prefetch" href="/contact-scene/_nuxt/basis_transcoder.VXdx5NbI.wasm">
 <link rel="prefetch" as="image" type="image/png" href="/contact-scene/_nuxt/fallLeaf.DlVBl2Oz.png">
 
-<script type="module" src="/contact-scene/_nuxt/T7ii45zO.js" crossorigin></script>
+<script type="module" src="/contact-scene/_nuxt/T7ii45zO.v6.js" crossorigin></script>
 </head>
 <body>
 <div id="__nuxt"></div>
