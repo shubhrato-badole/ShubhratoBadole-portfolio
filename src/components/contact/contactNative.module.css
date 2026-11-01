@@ -30,36 +30,197 @@
   pointer-events: auto; /* so the cursor smoke also sees the scene half */
 }
 
-/* fixed BEHIND the page (z-index -1): Work is opaque and covers it, so it only shows through the window that opens
-   under Work and through this transparent section */
-.poster {
+/* ------------------------------------------------------------------------------------ the picture scene (ContactBackdrop)
+   --cam / --rush / --land : 0 -> 1, written by ContactNative while the camera "moves" (cam = eased progress, rush = accelerating,
+   land = decelerating). Everything here is moved by CSS only (compositor), nothing per frame in JavaScript. */
+.lakeLayer,
+.scene {
   position: fixed;
-  inset: 0;
   z-index: -2;
-  background: #120a26 var(--poster) center bottom / cover no-repeat;
+  overflow: hidden;
+  pointer-events: none;
+  background: #120a26;
+}
+/* the lake: fixed behind Work (the window under it) */
+.lakeLayer {
+  inset: 0;
+  opacity: clamp(0, calc(1 - (var(--cam, 0) - 0.08) * 2.6), 1);
+}
+.par {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+.lakeImg {
+  position: absolute;
+  inset: -4%;
+  background: #120a26 var(--pic) center bottom / cover no-repeat;
+  will-change: transform;
+  /* the camera creeps forward with the visitor's pull (--pull), then rushes on over the water and a little to the right (--rush) */
+  transform: translate3d(calc(var(--rush, 0) * -7% + var(--pull, 0) * -3%), calc(var(--rush, 0) * 3% + var(--pull, 0) * 1.2%), 0)
+    scale(calc(1 + var(--rush, 0) * 0.55 + var(--pull, 0) * 0.16));
+}
+/* the garden: fixed while the camera arrives, STICKY once the section is open (so it scrolls with the page, Work never covers it) */
+.scene {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+  opacity: clamp(0, calc((var(--cam, 0) - 0.1) * 3), 1);
+}
+.open .scene {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  margin-bottom: -100vh;
+  margin-bottom: -100svh;
+  z-index: 0;
+}
+.breathe {
+  position: absolute;
+  inset: 0;
+  animation: drift 22s ease-in-out infinite alternate;
+}
+/* the camera lands: from the right, a touch large and rolled, settling in */
+.cam {
+  position: absolute;
+  inset: -1.2%;
+  will-change: transform;
+  transform: translate3d(calc((1 - var(--land, 0)) * 7%), calc((1 - var(--land, 0)) * 3%), 0) rotate(calc((1 - var(--land, 0)) * 1.6deg))
+    scale(calc(1.34 - var(--land, 0) * 0.34));
+}
+.gardenImg {
+  position: absolute;
+  inset: 0;
+  background: #120a26 var(--pic) center / cover no-repeat;
+}
+/* the sway: the same picture again, masked to the canopy / the grass, and rocked a hair */
+.swayCanopy {
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 46%, transparent 64%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 46%, transparent 64%);
+  transform-origin: 50% 62%;
+  animation: swayCanopy 8s ease-in-out infinite alternate;
+  will-change: transform;
+}
+.swayGrass {
+  -webkit-mask-image: linear-gradient(0deg, #000 0%, #000 34%, transparent 62%);
+  mask-image: linear-gradient(0deg, #000 0%, #000 34%, transparent 62%);
+  transform-origin: 50% 100%;
+  animation: swayGrass 6.5s ease-in-out infinite alternate;
+  will-change: transform;
+}
+.canopyGlow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(46% 34% at 38% 24%, rgba(226, 196, 255, 0.22), rgba(226, 196, 255, 0) 72%);
+  opacity: 0.5;
+  animation: glow 7s ease-in-out infinite alternate;
   pointer-events: none;
 }
-.stage {
-  position: fixed;
+@keyframes drift {
+  from {
+    transform: scale(1) translate3d(-0.4%, 0.2%, 0) rotate(-0.15deg);
+  }
+  to {
+    transform: scale(1.03) translate3d(0.45%, -0.3%, 0) rotate(0.18deg);
+  }
+}
+@keyframes swayCanopy {
+  from {
+    transform: translate3d(-0.3%, 0, 0) rotate(-0.55deg);
+  }
+  to {
+    transform: translate3d(0.35%, 0.12%, 0) rotate(0.55deg);
+  }
+}
+@keyframes swayGrass {
+  from {
+    transform: skewX(-0.7deg);
+  }
+  to {
+    transform: skewX(0.7deg);
+  }
+}
+@keyframes glow {
+  from {
+    opacity: 0.2;
+  }
+  to {
+    opacity: 0.7;
+  }
+}
+/* water glints: short pale dashes drifting across the lake (one tiled picture, moved by the compositor) */
+.glint {
+  position: absolute;
+  left: -10%;
+  width: 140%;
+  top: 58%;
+  height: 30%;
+  opacity: 0.2;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='70'><g fill='%23d9c4ff'><rect x='8' y='6' width='26' height='1.2' opacity='.7'/><rect x='96' y='13' width='40' height='1.2' opacity='.5'/><rect x='170' y='4' width='18' height='1.2' opacity='.8'/><rect x='40' y='25' width='34' height='1.2' opacity='.45'/><rect x='140' y='31' width='22' height='1.2' opacity='.7'/><rect x='12' y='44' width='44' height='1.2' opacity='.5'/><rect x='110' y='52' width='28' height='1.2' opacity='.6'/><rect x='186' y='60' width='30' height='1.2' opacity='.45'/></g></svg>");
+  background-size: 220px 70px;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 25%, #000 60%, transparent);
+  mask-image: linear-gradient(180deg, transparent, #000 25%, #000 60%, transparent);
+  animation: glint 16s linear infinite;
+}
+@keyframes glint {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-220px, 0, 0);
+  }
+}
+.life {
+  position: absolute;
   inset: 0;
-  z-index: -1;
   width: 100%;
   height: 100%;
   display: block;
-  background: transparent;
-  opacity: 0;
-  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
+}
+@media (max-width: 900px) {
+  /* the garden keeps the top of the screen, down to where the form sheet starts: the chairs are shown whole */
+  .scene {
+    width: 100%;
+    bottom: auto;
+    height: 46vh;
+    height: 46svh;
+  }
+  /* the section has 46svh of top padding (room for the picture): pull the sticky picture back up into it */
+  .open .scene {
+    height: 46vh;
+    height: 46svh;
+    margin-top: -46vh;
+    margin-top: -46svh;
+    margin-bottom: 0;
+  }
+  .cam {
+    inset: -1.5%;
+    transform: translate3d(calc((1 - var(--land, 0)) * 5%), calc((1 - var(--land, 0)) * 2%), 0) rotate(calc((1 - var(--land, 0)) * 1.2deg))
+      scale(calc(1.22 - var(--land, 0) * 0.22));
+  }
+  .gardenImg {
+    background-position: center 66%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .breathe,
+  .swayCanopy,
+  .swayGrass,
+  .canopyGlow,
+  .glint {
+    animation: none;
+  }
 }
 .shade {
   position: fixed;
   inset: 0;
-  z-index: -1;
+  z-index: 1;
   pointer-events: none;
   opacity: 0;
-  background:
-    radial-gradient(120% 90% at 30% 55%, rgba(5, 3, 12, 0) 40%, rgba(5, 3, 12, 0.55) 100%),
-    linear-gradient(180deg, rgba(5, 3, 12, 0.35) 0%, rgba(5, 3, 12, 0) 22%);
+  background: linear-gradient(180deg, rgba(5, 3, 12, 0.35) 0%, rgba(5, 3, 12, 0) 16%);
   transition: opacity 0.7s ease;
 }
 .stageOn {
@@ -83,17 +244,7 @@
 .in .panel {
   will-change: auto;
 }
-/* a soft edge so the scene melts into the panel instead of ending on a straight line */
-.panel::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 100%;
-  width: clamp(36px, 4.5vw, 84px);
-  background: linear-gradient(90deg, rgba(5, 3, 9, 0), rgba(5, 3, 9, 0.55) 65%, rgba(5, 3, 9, 0.96));
-  pointer-events: none;
-}
+/* the picture simply ends where the panel begins: one straight edge, no line, no fade */
 /* a breath of lilac light in the top corner */
 .panel::after {
   content: '';
@@ -494,9 +645,9 @@
     width: 100%;
     min-height: 54vh;
     min-height: 54svh;
-    border-radius: 26px 26px 0 0;
-    transform: translate3d(0, calc((1 - var(--pp, 0)) * 38svh), 0);
+    border-radius: 26px 26px 0 0; /* the rounded sheet is kept on phones */
     box-shadow: 0 -30px 60px rgba(5, 3, 9, 0.7);
+    transform: translate3d(0, calc((1 - var(--pp, 0)) * 38svh), 0);
   }
   .panel::before {
     display: none;
