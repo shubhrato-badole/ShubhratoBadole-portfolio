@@ -29,6 +29,7 @@ type RevealState = {
   lakeVisible: boolean; // part of the lake is on screen right now
   lakeNear: boolean; // the lake is about to be needed: run it at full speed
   setLakeReady: (ready: boolean) => void;
+  subscribeProgress: (fn: (p: number) => void) => () => void; // the ring's fill 0..1 while the visitor pulls
   jumpToNext: () => void; // move the page position to the contact page instantly (used while the screen is covered)
 };
 
@@ -40,6 +41,7 @@ const RevealContext = createContext<RevealState>({
   lakeVisible: false,
   lakeNear: false,
   setLakeReady: () => {},
+  subscribeProgress: () => () => {},
   jumpToNext: () => {},
 });
 export const useReveal = () => useContext(RevealContext);
@@ -71,6 +73,7 @@ export default function NextReveal({ children, next, title = 'Contact' }: Props)
   const [lakeNear, setLakeNear] = useState(false);
   const [direct, setDirect] = useState(false);
   const [directRun, setDirectRun] = useState(0);
+  const [engineKey, setEngineKey] = useState(0); // bumped to build a fresh engine = the ring reveal works again
   const directRef = useRef(false);
   const phaseRef = useRef<RevealPhase>('reveal');
   useEffect(() => {
@@ -98,6 +101,14 @@ export default function NextReveal({ children, next, title = 'Contact' }: Props)
     };
   }, []);
 
+  const progressSubs = useRef(new Set<(p: number) => void>());
+  const subscribeProgress = useCallback((fn: (p: number) => void) => {
+    progressSubs.current.add(fn);
+    return () => {
+      progressSubs.current.delete(fn);
+    };
+  }, []);
+
   // the engine: scroll / wheel / touch → ring, window and overlay
   useEffect(() => {
     const root = rootRef.current;
@@ -113,13 +124,35 @@ export default function NextReveal({ children, next, title = 'Contact' }: Props)
       onOpen: () => setPhase('open'),
       onLakeVisible: setLakeVisible,
       onLakeNear: setLakeNear,
+      onProgress: (p) => progressSubs.current.forEach((fn) => fn(p)),
     });
     engineRef.current = engine;
     return () => {
       engine.destroy();
       engineRef.current = null;
     };
-  }, []);
+  }, [engineKey]);
+
+  // RE-ARM: once the visitor has been on Contact and then leaves it (it is below the screen again), reset the reveal so the
+  // next time they reach the end of Work the lake window, the ring and the opening play again (it used to work only once)
+  useEffect(() => {
+    if (phase !== 'open') return;
+    const el = nextRef.current;
+    if (!el) return;
+    let arrived = false;
+    const check = () => {
+      const top = el.getBoundingClientRect().top;
+      if (top < window.innerHeight * 0.6) arrived = true;
+      else if (arrived && top > window.innerHeight * 1.02) {
+        directRef.current = false;
+        setDirect(false);
+        setPhase('reveal');
+        setEngineKey((k) => k + 1);
+      }
+    };
+    window.addEventListener('scroll', check, { passive: true });
+    return () => window.removeEventListener('scroll', check);
+  }, [phase]);
 
   // Two ways into the Contact page:
   //  · SCROLL: the reveal (lake window, ring, expansion), see revealEngine.ts
@@ -213,8 +246,8 @@ export default function NextReveal({ children, next, title = 'Contact' }: Props)
   }, []);
   const reportLakeReady = useCallback((ready: boolean) => setLakeReady(ready), []);
   const value = useMemo<RevealState>(
-    () => ({ phase, directRun, direct, lakeReady, lakeVisible, lakeNear, setLakeReady: reportLakeReady, jumpToNext }),
-    [phase, directRun, direct, lakeReady, lakeVisible, lakeNear, reportLakeReady, jumpToNext],
+    () => ({ phase, directRun, direct, lakeReady, lakeVisible, lakeNear, setLakeReady: reportLakeReady, subscribeProgress, jumpToNext }),
+    [phase, directRun, direct, lakeReady, lakeVisible, lakeNear, reportLakeReady, subscribeProgress, jumpToNext],
   );
 
   return (
