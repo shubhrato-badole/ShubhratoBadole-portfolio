@@ -3,7 +3,11 @@ import { TECHS, type Tech } from '@/components/stack/data';
 
 export interface AtlasInfo { texture: THREE.CanvasTexture; cols: number; rows: number; }
 
-const loadImg = (src: string) => new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+/* a picture that fails (or takes more than 15 s) comes back as null and its card stays dark: it must not stop the whole Stack from starting */
+const loadImg = (src: string) => new Promise<HTMLImageElement | null>((res) => {
+  const i = new Image(); const t = window.setTimeout(() => res(null), 15000);
+  i.onload = () => { window.clearTimeout(t); res(i); }; i.onerror = () => { window.clearTimeout(t); res(null); }; i.src = src;
+});
 
 // One texture holds every card; the ring shader picks a cell per slot (one draw call for the whole ring).
 export async function buildAtlas(cellW: number, cellH: number): Promise<AtlasInfo> {
@@ -11,7 +15,7 @@ export async function buildAtlas(cellW: number, cellH: number): Promise<AtlasInf
   const c = document.createElement('canvas'); c.width = cols * cellW; c.height = rows * cellH;
   const ctx = c.getContext('2d')!; ctx.fillStyle = '#05060a'; ctx.fillRect(0, 0, c.width, c.height);
   const imgs = await Promise.all(TECHS.map((t) => loadImg(t.asset)));
-  imgs.forEach((im, i) => { ctx.drawImage(im, (i % cols) * cellW, Math.floor(i / cols) * cellH, cellW, cellH); });
+  imgs.forEach((im, i) => { if (im) ctx.drawImage(im, (i % cols) * cellW, Math.floor(i / cols) * cellH, cellW, cellH); });
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.NoColorSpace; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
   tex.generateMipmaps = true; tex.anisotropy = 8; tex.needsUpdate = true;
