@@ -3,17 +3,17 @@ import { smooth } from './smooth';
 
 /* The numbers below are the reference site's own (its build's `lp` config + the wheel hook), not guesses. */
 export const REVEAL = {
-  threshold: 700, // px of extra wheel at the very bottom that fill the ring (mouse / trackpad)
-  thresholdTouch: 200, // the same, for touch screens
+  threshold: 520, // px of extra wheel at the very bottom that fill the ring (mouse / trackpad)
+  thresholdTouch: 150, // the same, for touch screens
   preview: 0.15, // how far the window opens while the ring fills (fraction of the screen)
   overshoot: -0.05, // where the window's top edge ends up when fully open (just above the screen)
-  expandDuration: 1, // seconds the window takes to open to full screen once the ring is full
-  startDelay: 0.1, // seconds between "fully open" and the next page starting
+  expandDuration: 0.7, // seconds the window takes to open to full screen once the ring is full
+  startDelay: 0.02, // seconds between "fully open" and the next page starting
   bottomEps: 0.001, // "at the bottom" = within 0.1% of the scroll range
   settleVelocity: 0.5, // scrolling must have settled (px / frame) before the ring arms
   idleMs: 90, // ring starts to drain this long after the last wheel tick
-  decayDuration: 0.9, // seconds the ring takes to drain from full
-  fireDuration: 0.18, // seconds from "threshold reached" to the hand-off
+  decayDuration: 0.6, // seconds the ring takes to drain from full
+  fireDuration: 0.12, // seconds from "threshold reached" to the hand-off
   /* --- touch screens only (desktop numbers above are untouched) --- */
   touchSlackPx: 6, // phones: "at the bottom" may be off by this many px (address bar / sub-pixel scroll positions)
   settleVelocityTouch: 3, // phones: how still the page must be (px / frame) before the ring arms
