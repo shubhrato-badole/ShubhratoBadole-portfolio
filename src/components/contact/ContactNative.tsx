@@ -20,7 +20,7 @@ import styles from './contactNative.module.css';
    TWO WAYS IN:
    · SCROLL  : Work lifts away, the lake window, the ring fills (revealEngine), the window opens, then the camera moves on to the
                tree and chairs while the black panel slides in from the right.
-   · BUTTON  : "Let's talk" / dock Contact: NO scene animation. The intro's RING closes over the screen (fast), the page jumps to the
+   · BUTTON  : "Let's talk" / dock Contact: NO scene animation. The intro's RING (same speed as every other ring) closes over the screen, the page jumps to the
                finished Contact page while it is covered, and the ring opens straight onto it. (If another ring is already covering the
                screen, e.g. the Stack overlay's, Contact does not start a second one.) */
 
@@ -32,7 +32,6 @@ const GARDEN_URL = '/contact-scene/garden-poster.jpg';
 
 /* how long the camera takes from the lake to the garden when you SCROLL in (seconds). A Contact button does not use it: that path lands on the finished page */
 const PAN_SECONDS = 1.7;
-const DIRECT_RING = { close: 0.55, open: 0.95 }; // seconds, the Contact button's ring (the Stack / Work rings keep their own, longer, defaults)
 
 // useLayoutEffect warns during server rendering; fall back to useEffect there
 const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
@@ -98,6 +97,14 @@ export default function ContactNative() {
     const io = new IntersectionObserver(([e]) => setSeen(e.intersectionRatio > 0.04), { threshold: [0, 0.04, 0.5, 1] });
     io.observe(el);
     return () => io.disconnect();
+  }, []);
+
+  /* decode the two big pictures while the browser is idle, so showing them later (end of Work / the hand-off) costs no hitch */
+  useEffect(() => {
+    const warm = () => [LAKE_URL, GARDEN_URL].forEach((u) => { const im = new Image(); im.decoding = 'async'; im.src = u; void im.decode?.().catch(() => {}); });
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+    if (w.requestIdleCallback) w.requestIdleCallback(warm, { timeout: 4000 });
+    else window.setTimeout(warm, 1500);
   }, []);
 
   /* The camera numbers are written ONLY on the elements that read them: the two picture layers (--cam / --rush / --land / --pull) and
@@ -199,7 +206,7 @@ export default function ContactNative() {
       void Promise.resolve().then(land);
       return;
     }
-    void runRingTransition(land, { close: DIRECT_RING.close, open: DIRECT_RING.open });
+    void runRingTransition(land); // the shared ring, with the shared speed
   }, [direct, open, directRun, jumpToNext, setProgress]);
 
   useEffect(
