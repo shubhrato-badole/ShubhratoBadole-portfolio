@@ -100,9 +100,9 @@ export default function About() {
         const words = all('[data-statement] [data-w]');
         gsap.set(words, { opacity: 0, y: 50 });
         gsap.to(words, {
-          opacity: 1, y: 0, duration: 2.4, ease: 'power4.out',
-          stagger: { each: 0.04, from: 'random' },
-          scrollTrigger: { trigger: statement, start: 'top 85%', toggleActions: 'play none none reverse' },
+          opacity: 1, y: 0, duration: 1.3, ease: 'power4.out',
+          stagger: { each: 0.022, from: 'random' },
+          scrollTrigger: { trigger: statement, start: 'top 93%', toggleActions: 'play none none reverse' },
         });
       }
 
@@ -154,12 +154,12 @@ export default function About() {
 
         // a word comes up and grows into place; later it lifts a little and fades out (fast, so the next word never sits on top of it)
         const enter = (t: gsap.TweenTarget, at: number) =>
-          tl.fromTo(t, { opacity: 0, yPercent: 12, scale: 0.86 }, { opacity: 1, yPercent: 0, scale: 1, duration: 2.6, ease: 'power3.out', immediateRender: false }, at);
+          tl.fromTo(t, { opacity: 0, yPercent: 12, scale: 0.86 }, { opacity: 1, yPercent: 0, scale: 1, duration: 1.8, ease: 'power3.out', immediateRender: false }, at);
         const exit = (t: gsap.TweenTarget, at: number) =>
           tl.fromTo(t, { opacity: 1, yPercent: 0, scale: 1 }, { opacity: 0, yPercent: -10, scale: 1.05, duration: 1.6, ease: 'power2.out', immediateRender: false }, at);
         // the lines of text on the right come up one after another, and leave together with their word
         const showSide = (t: gsap.TweenTarget, at: number) =>
-          tl.fromTo(t, { opacity: 0, yPercent: 40 }, { opacity: 1, yPercent: 0, duration: 1.2, stagger: 0.35, ease: 'power2.out', immediateRender: false }, at);
+          tl.fromTo(t, { opacity: 0, yPercent: 40 }, { opacity: 1, yPercent: 0, duration: 0.85, stagger: 0.2, ease: 'power2.out', immediateRender: false }, at);
         const hideSide = (t: gsap.TweenTarget, at: number) =>
           tl.fromTo(t, { opacity: 1, yPercent: 0 }, { opacity: 0, yPercent: -30, duration: 0.9, stagger: 0.08, ease: 'power2.in', immediateRender: false }, at);
 
@@ -174,20 +174,20 @@ export default function About() {
         });
 
         // Build comes up and grows. Its sentence on the right starts coming up just before the lines start drawing.
-        tl.fromTo(words[0], { scale: 0.74, yPercent: 10 }, { scale: 1, yPercent: 0, duration: 2.6, ease: 'power3.out', immediateRender: false }, 0);
-        showSide(sideLines[0], LINE_START - 0.5);
+        tl.fromTo(words[0], { scale: 0.74, yPercent: 10 }, { scale: 1, yPercent: 0, duration: 1.8, ease: 'power3.out', immediateRender: false }, 0);
+        showSide(sideLines[0], LINE_START - 1.1);
 
         // Build hands over to Break
         exit(words[0], 6);
         hideSide(sideLines[0], 6);
         enter(words[1], 7);
-        showSide(sideLines[1], 8.4);
+        showSide(sideLines[1], 7.6);
 
         // Break hands over to Trust, which is fully in about when the lines finish drawing
         exit(words[1], 13);
         hideSide(sideLines[1], 13);
         enter(words[2], 14);
-        showSide(sideLines[2], 15.4);
+        showSide(sideLines[2], 14.6);
 
         // Trust leaves soon after its text, and the card (unchanged) rises and grows
         exit(words[2], 19.6);
@@ -213,8 +213,8 @@ export default function About() {
         gsap.set(w, from);
         gsap.to(w, { ...to, stagger, scrollTrigger: { trigger: el, start, toggleActions: 'play none none reverse' } });
       };
-      reveal('[data-process-head]', { opacity: 0, y: 80 }, { opacity: 1, y: 0, duration: 0.8, ease: 'power4.out' }, 0.05, 'top 75%');
-      reveal('[data-process-intro]', { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.7, ease: 'power3.out' }, 0.015, 'top 80%');
+      reveal('[data-process-head]', { opacity: 0, y: 80 }, { opacity: 1, y: 0, duration: 0.55, ease: 'power4.out' }, 0.035, 'top 90%');
+      reveal('[data-process-intro]', { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.5, ease: 'power3.out' }, 0.01, 'top 92%');
       all('[data-step]').forEach((step) => {
         const tw = all('[data-step-title] [data-w]', step);
         const bw = all('[data-step-body] [data-w]', step);
@@ -222,10 +222,10 @@ export default function About() {
         gsap.set(tw, { opacity: 0, y: 60 });
         gsap.set(bw, { opacity: 0, y: 30 });
         gsap
-          .timeline({ scrollTrigger: { trigger: step, start: 'top 80%', toggleActions: 'play none none reverse' } })
-          .to(step, { y: 0, opacity: 1, duration: 0.8, ease: 'power4.out' })
-          .to(tw, { opacity: 1, y: 0, stagger: 0.05, duration: 0.5, ease: 'power4.out' }, '-=0.4')
-          .to(bw, { opacity: 1, y: 0, stagger: 0.015, duration: 0.4, ease: 'power3.out' }, '-=0.35');
+          .timeline({ scrollTrigger: { trigger: step, start: 'top 92%', toggleActions: 'play none none reverse' } })
+          .to(step, { y: 0, opacity: 1, duration: 0.55, ease: 'power4.out' })
+          .to(tw, { opacity: 1, y: 0, stagger: 0.035, duration: 0.38, ease: 'power4.out' }, '-=0.38')
+          .to(bw, { opacity: 1, y: 0, stagger: 0.01, duration: 0.3, ease: 'power3.out' }, '-=0.34');
       });
 
       return () => undo.forEach((fn) => fn());
