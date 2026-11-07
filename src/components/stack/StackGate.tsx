@@ -13,6 +13,7 @@ import { runRingTransition } from './ringTransition';
 import Title from './Title';
 import Pagination from './Pagination';
 import Filter from './Filter';
+import { TECHS } from './data';
 
 /* The numbers below are the reference site's own (the same table revealEngine.ts uses for the Contact reveal). */
 const REVEAL = {
@@ -103,7 +104,13 @@ export default function StackGate({ children }: { children: ReactNode }) {
       // scene
       bootP: null as Promise<boolean> | null, sceneReady: false, bootFailed: false, sceneOn: false, shown: false,
       ovG: -1, clipV: -1, bootQueued: false, lastMeasure: 0,
+      // phones: a finger is on the screen / the page was stopped by hand a moment ago
+      touching: false, holdOff: 0, holdN: 0, holdT: 0, bootErr: '', dbgAt: 0,
     };
+
+    /* ?debug=stack shows a small status box (boot state, scroll numbers) so a problem on a phone can be read off the screen */
+    const dbg = /[?&]debug=stack\b/.test(location.search) ? document.createElement('pre') : null;
+    if (dbg) { dbg.style.cssText = 'position:fixed;left:6px;bottom:6px;z-index:99999;margin:0;padding:6px 8px;background:rgba(0,0,0,.78);color:#7CFC00;font:11px/1.35 monospace;max-width:92vw;pointer-events:none;white-space:pre-wrap;border-radius:6px'; document.body.appendChild(dbg); }
 
     /* ───────── measuring (cached) ───────── */
     const measure = () => {
@@ -130,10 +137,17 @@ export default function StackGate({ children }: { children: ReactNode }) {
           w.applyFilter(null);
           st.sceneReady = true; setReady(true);
           return true;
-        } catch { st.bootFailed = true; return false; }
+        } catch (err) { st.bootFailed = true; st.bootErr = err instanceof Error ? err.message : String(err); console.error('[stack] the scene could not start', err); return false; }
       })();
       return st.bootP;
     };
+    /* the 19 card pictures are fetched while the browser is idle (they used to start downloading only when the scene booted,
+       which on a phone connection left the Stack not ready when you reached the end of About) */
+    const prefetch = () => TECHS.forEach((t) => { const im = new Image(); im.decoding = 'async'; im.src = t.asset; });
+    {
+      const w = window as any;
+      if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(prefetch, { timeout: 5000 }); else w.setTimeout(prefetch, 2500);
+    }
     // building the scene is the one heavy step: do it when the browser is idle, a little before the end of About, never mid-scroll-frame
     const bootSoon = () => {
       if (st.bootQueued || st.bootP) return; st.bootQueued = true;
@@ -142,6 +156,26 @@ export default function StackGate({ children }: { children: ReactNode }) {
       if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(run, { timeout: 1200 }); else w.setTimeout(run, 250);
     };
     const unlockFor = (ms = 1600) => { st.unlockUntil = performance.now() + ms; };
+    /* PHONES: a finger flick keeps the page coasting after the finger is up. Setting the scroll position every frame fights that
+       coasting (the page jitters, and a strong flick still wins and carries you past the end). Instead: lock the page's scrolling for
+       a moment (the coasting dies at once), put it exactly where it belongs, unlock. If the browser keeps winning anyway, give up for a
+       moment instead of flickering forever. */
+    let lockT = 0;
+    const momentumLock = () => {
+      document.documentElement.setAttribute('data-sg-lock', '');
+      window.clearTimeout(lockT);
+      lockT = window.setTimeout(() => document.documentElement.removeAttribute('data-sg-lock'), 220);
+    };
+    const holdAt = (y: number) => {
+      if (!coarse) { clampTo(y); return; }
+      const now = performance.now();
+      if (now < st.holdOff) return;
+      if (now - st.holdT > 700) st.holdN = 0;
+      st.holdT = now;
+      if (++st.holdN > 10) { st.holdOff = now + 1500; st.holdN = 0; return; }
+      if (!st.touching) momentumLock();
+      clampTo(y);
+    };
     const leaveWork = () => { st.inWork = false; };
 
     /* ───────── overlay + page window ───────── */
@@ -213,7 +247,7 @@ export default function StackGate({ children }: { children: ReactNode }) {
       // Work is its own page: once inside it you cannot scroll above its top (inertia, scrollbar and keys included)
       if (!st.open && !free && st.workTop !== Infinity) {
         if (!st.inWork && scroll >= st.workTop - 1) { measure(); if (scroll >= st.workTop - 1) st.inWork = true; }
-        else if (st.inWork && scroll < st.workTop - 0.5) { measure(); if (scroll < st.workTop - 0.5) clampTo(st.workTop); }
+        else if (st.inWork && scroll < st.workTop - 0.5) { measure(); if (scroll < st.workTop - 0.5 && !(coarse && st.touching)) holdAt(st.workTop); }
       }
       if (st.open) return;
 
@@ -225,7 +259,7 @@ export default function StackGate({ children }: { children: ReactNode }) {
 
       // keep a fast flick from carrying you past the end of About (the Stack must open first).
       // Phones: a finger flick keeps coasting with NO input events after the finger is up, so there the guard never times out.
-      if (!free && !st.fired && (coarse || now < st.userUntil) && scroll > limitY + (coarse ? REVEAL.touchSlackPx : 0.5)) { measure(); if (scroll > st.rootBottom - H + (coarse ? REVEAL.touchSlackPx : 0.5)) clampTo(st.rootBottom - H); }
+      if (!free && !st.fired && (coarse ? !st.touching : now < st.userUntil) && scroll > limitY + (coarse ? REVEAL.touchSlackPx : 0.5)) { measure(); if (scroll > st.rootBottom - H + (coarse ? REVEAL.touchSlackPx : 0.5)) holdAt(st.rootBottom - H); }
 
       const dt = Math.min(0.1, (deltaMs || 16.667) / 1000);
       const pBottom = st.rootBottom - st.bandH - scroll;            // bottom edge of About, in screen px
@@ -252,6 +286,11 @@ export default function StackGate({ children }: { children: ReactNode }) {
       const e = st.fired ? st.exp.v : st.progress * REVEAL.preview;
       const windowTop = lerp(pBottom, REVEAL.overshoot * H, e);
       setClip(clamp(pBottom - windowTop, 0, st.panelH));
+
+      if (dbg && now - st.dbgAt > 250) {
+        st.dbgAt = now;
+        dbg.textContent = `stack  scene:${st.sceneReady ? 'ready' : st.bootFailed ? 'FAILED ' + st.bootErr : st.bootP ? 'loading' : 'not started'}\nscroll ${scroll | 0}  end ${limitY | 0}  band ${(g * 100) | 0}%  ring ${(st.progress * 100) | 0}%\narmed ${st.armed ? 1 : 0}  fired ${st.fired ? 1 : 0}  inWork ${st.inWork ? 1 : 0}  touch ${coarse ? 1 : 0}`;
+      }
 
       // the scene behind it: small inside the window, growing as the window opens
       if (st.sceneReady) {
@@ -286,7 +325,7 @@ export default function StackGate({ children }: { children: ReactNode }) {
       }
     };
     const onWheel = (e: WheelEvent) => handle(e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1), e);
-    const onTouchStart = (e: TouchEvent) => { st.touchY = e.touches[0]?.clientY ?? 0; st.touchT = performance.now(); st.touchV = 0; st.userUntil = performance.now() + 350; };
+    const onTouchStart = (e: TouchEvent) => { st.touching = true; st.touchY = e.touches[0]?.clientY ?? 0; st.touchT = performance.now(); st.touchV = 0; st.userUntil = performance.now() + 350; };
     const onTouchMove = (e: TouchEvent) => {
       const y = e.touches[0]?.clientY ?? st.touchY, dy = st.touchY - y; st.touchY = y;
       const t = performance.now(); st.touchV = dy / Math.max(1, t - st.touchT); st.touchT = t; // finger speed, px / ms (positive = swiping up = scrolling down)
@@ -294,6 +333,7 @@ export default function StackGate({ children }: { children: ReactNode }) {
     };
     /* a quick flick up at the end opens the Stack in one go, like a hard scroll with a mouse wheel */
     const onTouchEnd = () => {
+      st.touching = false;
       if (!st.armed || st.fired || st.open) return;
       if (st.touchV >= REVEAL.flickSpeed && performance.now() - st.touchT < 90 && st.s >= threshold * REVEAL.flickMinFill) { st.s = threshold; st.lastInput = performance.now(); }
     };
@@ -401,6 +441,7 @@ export default function StackGate({ children }: { children: ReactNode }) {
       window.removeEventListener('portfolio:home', onHome);
       document.documentElement.removeAttribute('data-sr-open');
       document.documentElement.removeAttribute('data-pull-stack');
+      document.documentElement.removeAttribute('data-sg-lock'); window.clearTimeout(lockT); dbg?.remove();
       window.removeEventListener('resize', measure); window.removeEventListener('load', measure);
       ScrollTrigger.removeEventListener('refresh', measure); ro.disconnect();
       panel.style.clipPath = ''; panel.style.visibility = ''; panel.style.willChange = '';
@@ -433,7 +474,6 @@ export default function StackGate({ children }: { children: ReactNode }) {
         createPortal(
           <>
             {/* the scene lives BEHIND the page (z-index -1), like the Contact iframe: the page lifting away uncovers it */}
-            <div className="sr-bgfill" aria-hidden />
             <canvas ref={cv} className={`sr-bg${open ? ' sr-bg--front' : ''}`} aria-hidden />
             {open && <div className="sr-backdrop" aria-hidden />}
             <div ref={overlayRef} className="sr-root sr-pull" style={{ visibility: 'hidden' }}>
