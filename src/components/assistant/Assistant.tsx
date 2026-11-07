@@ -13,7 +13,7 @@ import {
   BUBBLE_SECTION,
   GREETING,
   INTRO_CHIPS,
-  cannedTransport,
+  geminiTransport,
   speechText,
   type Msg,
   type Reply,
@@ -26,7 +26,7 @@ import { createFluidSmoke } from '../../work/smoke';
 type Props = {
   /** Flip to true when the intro hands off; the launcher shows up then. */
   ready?: boolean;
-  /** Swap in a real (Gemini) transport; defaults to preset answers. */
+  /** Defaults to Gemini (via /api/chat), falling back to the preset answers. */
   transport?: Transport;
   /** Colours: defaults to HERO_THEME in ./theme.ts */
   theme?: HeroTheme;
@@ -131,7 +131,7 @@ const Icon = {
 
 export default function Assistant({
   ready = true,
-  transport = cannedTransport,
+  transport = geminiTransport,
   theme = HERO_THEME,
 }: Props) {
   const [open, setOpen] = useState(false);
