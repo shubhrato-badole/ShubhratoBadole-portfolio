@@ -80,7 +80,9 @@ export default function NextReveal({ children, next, title = 'Contact' }: Props)
     phaseRef.current = phase;
   }, [phase]);
 
+  const lakeReadyRef = useRef(false);
   useEffect(() => {
+    lakeReadyRef.current = lakeReady;
     engineRef.current?.setLakeReady(lakeReady);
   }, [lakeReady]);
 
@@ -127,6 +129,7 @@ export default function NextReveal({ children, next, title = 'Contact' }: Props)
       onProgress: (p) => progressSubs.current.forEach((fn) => fn(p)),
     });
     engineRef.current = engine;
+    engine.setLakeReady(lakeReadyRef.current); // a re-armed engine starts from scratch: tell it (the lake window never showed the second time)
     return () => {
       engine.destroy();
       engineRef.current = null;
