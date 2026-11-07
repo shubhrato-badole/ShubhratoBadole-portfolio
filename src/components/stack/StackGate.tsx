@@ -26,6 +26,13 @@ const REVEAL = {
   idleMs: 90, // the ring starts to drain this long after the last wheel tick
   decayDuration: 0.9, // seconds the ring takes to drain from full
   fireDuration: 0.18, // seconds from "threshold reached" to the hand-off
+  /* --- touch screens only (same numbers as revealEngine.ts; the desktop numbers above are untouched) --- */
+  touchSlackPx: 6, // phones: "at the end" may be off by this many px (address bar / sub-pixel scroll positions)
+  settleVelocityTouch: 3, // phones: how still the page must be (px / frame) before the ring arms
+  idleMsTouch: 260, // phones: the ring starts to drain this long after the finger last moved (a finger pauses between events)
+  touchGain: 1.5, // phones: one swipe fills the ring faster than the same distance of mouse wheel
+  flickSpeed: 0.5, // phones: a quick flick (px / ms) at the end fills the ring completely
+  flickMinFill: 0.2, // ...as long as the ring has already started filling (fraction)
 } as const;
 
 const CIRC = 2 * Math.PI * 48;
@@ -83,7 +90,8 @@ export default function StackGate({ children }: { children: ReactNode }) {
     const root = rootRef.current, panel = panelRef.current, overlay = overlayRef.current;
     if (!root || !panel || !overlay) return;
     gsap.registerPlugin(ScrollTrigger);
-    const threshold = window.matchMedia('(pointer: coarse)').matches ? REVEAL.thresholdTouch : REVEAL.threshold;
+    const coarse = window.matchMedia('(pointer: coarse)').matches; // a phone / tablet: finger, no wheel
+    const threshold = coarse ? REVEAL.thresholdTouch : REVEAL.threshold;
 
     const st = {
       // ring / reveal (same state as revealEngine.ts)
@@ -91,7 +99,7 @@ export default function StackGate({ children }: { children: ReactNode }) {
       // measured once (not every frame), so the pinned About scene never pays for layout reads
       rootBottom: Infinity, bandH: 0, panelH: 0, workTop: Infinity,
       // modes
-      open: false, busy: false, destroyed: false, inWork: false, unlockUntil: 0, userUntil: 0, touchY: 0, prevScroll: 0,
+      open: false, busy: false, destroyed: false, inWork: false, unlockUntil: 0, userUntil: 0, touchY: 0, touchT: 0, touchV: 0, prevScroll: 0,
       // scene
       bootP: null as Promise<boolean> | null, sceneReady: false, bootFailed: false, sceneOn: false, shown: false,
       ovG: -1, clipV: -1, bootQueued: false, lastMeasure: 0,
@@ -213,10 +221,11 @@ export default function StackGate({ children }: { children: ReactNode }) {
       const dist = limitY - scroll;
       if (st.inWork || st.bootFailed || (dist > H * 1.6 && st.progress === 0 && !st.fired)) { if (st.shown) hideAll(); return; }
       st.shown = true;
-      if (dist < H * 2.2) bootSoon();              // build the scene a little before it is needed
+      if (dist < H * (coarse ? 4 : 2.2)) bootSoon(); // build the scene a little before it is needed (phones are slower: earlier)
 
-      // keep a fast flick from carrying you past the end of About (the Stack must open first)
-      if (!free && !st.fired && now < st.userUntil && scroll > limitY + 0.5) { measure(); if (scroll > st.rootBottom - H + 0.5) clampTo(st.rootBottom - H); }
+      // keep a fast flick from carrying you past the end of About (the Stack must open first).
+      // Phones: a finger flick keeps coasting with NO input events after the finger is up, so there the guard never times out.
+      if (!free && !st.fired && (coarse || now < st.userUntil) && scroll > limitY + (coarse ? REVEAL.touchSlackPx : 0.5)) { measure(); if (scroll > st.rootBottom - H + (coarse ? REVEAL.touchSlackPx : 0.5)) clampTo(st.rootBottom - H); }
 
       const dt = Math.min(0.1, (deltaMs || 16.667) / 1000);
       const pBottom = st.rootBottom - st.bandH - scroll;            // bottom edge of About, in screen px
@@ -224,12 +233,15 @@ export default function StackGate({ children }: { children: ReactNode }) {
       setOverlay(g);
 
       const velocity = lenis ? lenis.velocity : scroll - st.prevScroll; st.prevScroll = scroll;
-      const atEnd = scroll >= limitY - 1.5;
-      st.armed = !st.fired && g >= 0.999 && atEnd && Math.abs(velocity) <= REVEAL.settleVelocity;
+      /* Phones: the strict desktop checks never pass there (the address bar changes the screen height while you scroll and positions are
+         fractional), so the ring never armed. Same rules, with a few pixels of slack and a calmer "page is still" test. */
+      const atEnd = scroll >= limitY - (coarse ? REVEAL.touchSlackPx : 1.5);
+      const wiped = coarse ? st.bandH > 0 && g >= 1 - REVEAL.touchSlackPx / st.bandH : g >= 0.999;
+      st.armed = !st.fired && wiped && atEnd && Math.abs(velocity) <= (coarse ? REVEAL.settleVelocityTouch : REVEAL.settleVelocity);
       if (!st.latched && st.s >= threshold) { st.latched = true; st.s = threshold; }
       if (st.latched) st.n = Math.min(threshold, st.n + (threshold / REVEAL.fireDuration) * dt);
       else {
-        if (!st.armed || now - st.lastInput > REVEAL.idleMs) st.s = Math.max(0, st.s - (threshold / REVEAL.decayDuration) * dt);
+        if (!st.armed || now - st.lastInput > (coarse ? REVEAL.idleMsTouch : REVEAL.idleMs)) st.s = Math.max(0, st.s - (threshold / REVEAL.decayDuration) * dt);
         st.n += (st.s - st.n) * (1 - Math.exp(-14 * dt));
       }
       st.progress = clamp(st.n / threshold);
@@ -258,7 +270,7 @@ export default function StackGate({ children }: { children: ReactNode }) {
       st.s = Math.min(threshold, st.s + d); st.lastInput = performance.now();
     };
     const block = (e: Event) => { if (e.cancelable) e.preventDefault(); e.stopImmediatePropagation(); };
-    const atEndZone = (scroll: number) => { const L = st.rootBottom - innerHeight; return scroll >= L - 3 && scroll <= L + 160; };
+    const atEndZone = (scroll: number) => { const L = st.rootBottom - innerHeight; return scroll >= L - (coarse ? REVEAL.touchSlackPx + 3 : 3) && scroll <= L + 160; };
     const handle = (dy: number, e: Event) => {
       const now = performance.now(), scroll = curScroll();
       st.userUntil = now + 350;
@@ -274,8 +286,17 @@ export default function StackGate({ children }: { children: ReactNode }) {
       }
     };
     const onWheel = (e: WheelEvent) => handle(e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1), e);
-    const onTouchStart = (e: TouchEvent) => { st.touchY = e.touches[0]?.clientY ?? 0; st.userUntil = performance.now() + 350; };
-    const onTouchMove = (e: TouchEvent) => { const y = e.touches[0]?.clientY ?? st.touchY, dy = st.touchY - y; st.touchY = y; handle(dy, e); };
+    const onTouchStart = (e: TouchEvent) => { st.touchY = e.touches[0]?.clientY ?? 0; st.touchT = performance.now(); st.touchV = 0; st.userUntil = performance.now() + 350; };
+    const onTouchMove = (e: TouchEvent) => {
+      const y = e.touches[0]?.clientY ?? st.touchY, dy = st.touchY - y; st.touchY = y;
+      const t = performance.now(); st.touchV = dy / Math.max(1, t - st.touchT); st.touchT = t; // finger speed, px / ms (positive = swiping up = scrolling down)
+      handle(dy * REVEAL.touchGain, e);
+    };
+    /* a quick flick up at the end opens the Stack in one go, like a hard scroll with a mouse wheel */
+    const onTouchEnd = () => {
+      if (!st.armed || st.fired || st.open) return;
+      if (st.touchV >= REVEAL.flickSpeed && performance.now() - st.touchT < 90 && st.s >= threshold * REVEAL.flickMinFill) { st.s = threshold; st.lastInput = performance.now(); }
+    };
     const onKey = (e: KeyboardEvent) => {
       if (st.open || e.altKey || e.ctrlKey || e.metaKey) return;
       const k = e.key, up = k === 'ArrowUp' || k === 'PageUp' || k === 'Home' || (k === ' ' && e.shiftKey);
@@ -291,8 +312,9 @@ export default function StackGate({ children }: { children: ReactNode }) {
     const openNav = () => {
       if (st.busy || st.open) return;
       st.busy = true; unlockFor(2400);
+      const booting = boot(); // the scene starts building NOW, while the ring is still closing (it used to start only once the screen was covered)
       void runRingTransition(async () => {
-        if (!(await boot())) return;
+        if (!(await booting)) return;
         measure(); leaveWork();
         commitOpen(true);
       }).finally(() => { st.busy = false; });
@@ -331,20 +353,28 @@ export default function StackGate({ children }: { children: ReactNode }) {
       else if (st.open && (hit('#about') || hit('#top'))) { e.preventDefault(); e.stopImmediatePropagation(); exit('about'); }
       else if (st.open && hit('#contact')) { e.preventDefault(); e.stopImmediatePropagation(); exit('contact'); }
       else if (!st.open && inWorkNow && (hit('#about') || hit('#top'))) { e.preventDefault(); e.stopImmediatePropagation(); goTo(hit('#top') ? 'top' : 'about'); }
+      else if (!st.open && (hit('#about') || hit('#top'))) {
+        // from the hero: About / Home also use the ring (unless you are already looking at that page)
+        const id = hit('#top') ? 'top' : 'about', el = document.getElementById(id);
+        const here = id === 'top' ? scroll < innerHeight * 0.35 : !el || Math.abs(el.getBoundingClientRect().top) < innerHeight * 0.35;
+        if (!here) { e.preventDefault(); e.stopImmediatePropagation(); goTo(id); }
+      }
     };
 
-    // the phone dock's "Home": from inside the Stack or Work it goes back to the top with the ring; otherwise the dock scrolls by itself
+    // the phone dock's "Home": from the Stack, About or Work it goes back to the top with the ring; at the top it just stays
     const onHome = (e: Event) => {
       const detail = (e as CustomEvent<{ handled: boolean }>).detail;
       const scroll = curScroll(), inWorkNow = st.inWork || (st.workTop !== Infinity && scroll >= st.workTop - 1);
       if (st.open) { exit('top'); if (detail) detail.handled = true; }
-      else if (inWorkNow) { goTo('top'); if (detail) detail.handled = true; }
+      else if (inWorkNow || scroll > innerHeight * 0.35) { goTo('top'); if (detail) detail.handled = true; } // from About too: it used to be a plain scroll
     };
 
     /* ───────── wiring ───────── */
     window.addEventListener('wheel', onWheel, { capture: true, passive: false });
     window.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
     window.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
+    window.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
+    window.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: true });
     window.addEventListener('keydown', onKey, true);
     document.addEventListener('click', onClick, true);
     window.addEventListener('portfolio:open-stack', openNav);
@@ -363,6 +393,8 @@ export default function StackGate({ children }: { children: ReactNode }) {
       window.removeEventListener('wheel', onWheel, true);
       window.removeEventListener('touchstart', onTouchStart, true);
       window.removeEventListener('touchmove', onTouchMove, true);
+      window.removeEventListener('touchend', onTouchEnd, true);
+      window.removeEventListener('touchcancel', onTouchEnd, true);
       window.removeEventListener('keydown', onKey, true);
       document.removeEventListener('click', onClick, true);
       window.removeEventListener('portfolio:open-stack', openNav);
@@ -401,6 +433,7 @@ export default function StackGate({ children }: { children: ReactNode }) {
         createPortal(
           <>
             {/* the scene lives BEHIND the page (z-index -1), like the Contact iframe: the page lifting away uncovers it */}
+            <div className="sr-bgfill" aria-hidden />
             <canvas ref={cv} className={`sr-bg${open ? ' sr-bg--front' : ''}`} aria-hidden />
             {open && <div className="sr-backdrop" aria-hidden />}
             <div ref={overlayRef} className="sr-root sr-pull" style={{ visibility: 'hidden' }}>
