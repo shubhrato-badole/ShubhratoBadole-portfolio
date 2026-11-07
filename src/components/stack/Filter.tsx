@@ -58,7 +58,10 @@ export default function Filter() {
         <div ref={menu} className="sr-fmenu" data-state={open ? 'open' : 'closed'} role="menu" aria-label="Filter">
           <Glass className="sr-fmenu__surface sr-glass" />
           <div className="sr-fmenu__items">
-            <div className="sr-fmenu__label sr-mono">Filter</div>
+            {/* the header IS the Filter button again: tap it to close (on phones the open list sits exactly over the pill, so the pill itself can't be reached) */}
+            <button type="button" className="sr-fmenu__label sr-fmenu__label--close sr-mono" aria-label="Close filter" onClick={hide}>
+              <span>Filter</span><X />
+            </button>
             <button className={`sr-fmenu__item${sub ? ' sr-is-hot' : ''}`} role="menuitem" aria-haspopup="menu" aria-expanded={sub}
               onPointerEnter={() => openSub()} onClick={() => setSub((s) => !s)} onKeyDown={(e) => { if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); setSub(true); } }}>
               <Layers /><span>Category</span><Chevron />
