@@ -1,6 +1,6 @@
 /* Everything the assistant says, and how a question turns into an answer.
-   Swap `cannedTransport` for a real one (Gemini) later: the UI only talks
-   to the `Transport` interface. */
+   The UI only talks to the `Transport` interface. `geminiTransport` (the default) asks Gemini through /api/chat and
+   quietly falls back to `cannedTransport` (the built-in answers below) when there is no key, no network or the limit is hit. */
 
 export const CONTACT = {
   /* fill this in; the email link is hidden while it's empty */
@@ -209,6 +209,47 @@ export const cannedTransport: Transport = {
   },
 };
 
+const GO_LABEL: Record<Target, string> = {
+  top: 'Back to the top',
+  about: 'Open the about section',
+  stack: 'See the stack',
+  work: 'Jump to the work section',
+  contact: 'Open the contact section',
+};
+
+/* the real brain: Gemini, asked on the server (src/app/api/chat/route.ts) so the API key never reaches the browser */
+export const geminiTransport: Transport = {
+  async reply(text, history, signal) {
+    // the resume needs the real file link, which the built-in answer already carries
+    if (/\b(resume|cv|curriculum)\b/i.test(text)) return cannedTransport.reply(text, history, signal);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal,
+        body: JSON.stringify({
+          message: text,
+          history: history.filter((m) => m.text).slice(-8).map((m) => ({ role: m.role, text: m.text })),
+        }),
+      });
+      if (res.ok) {
+        const d = (await res.json()) as { text?: string; action?: Target };
+        if (d.text) {
+          const target = d.action && d.action in GO_LABEL ? d.action : undefined;
+          return {
+            text: d.text,
+            action: target ? { label: GO_LABEL[target], target } : undefined,
+            links: target === 'contact' ? contactLinks() : undefined,
+            chips: MAIN,
+          };
+        }
+      }
+    } catch (e) {
+      if (signal.aborted) throw e; // the visitor sent something else: let the UI drop this one
+    }
+    return cannedTransport.reply(text, history, signal); // no key, offline or rate-limited: the built-in answers
+  },
+};
 
 /* Text prepared for the voice: spoken forms of things a TTS voice would
    otherwise read oddly ("5ms", "AES-256", "CI/CD"), and no URLs/markdown. */
