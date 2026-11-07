@@ -22,6 +22,8 @@ type Props = {
   mobile: boolean;
   lake: string;
   garden: string;
+  /** false = both pictures are hidden (nothing of Contact may show through any other page's window, e.g. the Stack's) */
+  visible: boolean;
 };
 
 const sm = (a: number, b: number, x: number) => {
@@ -38,7 +40,7 @@ function rng(seed: number) {
   };
 }
 
-export default function ContactBackdrop({ ppRef, active, mobile, lake, garden }: Props) {
+export default function ContactBackdrop({ ppRef, active, mobile, lake, garden, visible }: Props) {
   const lakeCvRef = useRef<HTMLCanvasElement>(null);
   const gardenCvRef = useRef<HTMLCanvasElement>(null);
   const lakeParRef = useRef<HTMLDivElement>(null);
@@ -222,7 +224,7 @@ export default function ContactBackdrop({ ppRef, active, mobile, lake, garden }:
   return (
     <>
       {/* the lake: fixed behind Work (the window that opens under it); it zooms away while the camera moves on */}
-      <div className={styles.lakeLayer} style={pic(lake)} aria-hidden>
+      <div className={`${styles.lakeLayer} ${visible ? '' : styles.layerOff}`} style={pic(lake)} data-cxv aria-hidden>
         <div ref={lakeParRef} className={styles.par}>
           <div className={styles.lakeImg} />
           <div className={styles.glint} />
@@ -231,7 +233,7 @@ export default function ContactBackdrop({ ppRef, active, mobile, lake, garden }:
       </div>
       {/* the garden: fixed while the camera arrives, then sticky inside the section so it scrolls WITH the page.
           Desktop: the left half. Phone: the top part (the form sheet rises over the rest). */}
-      <div className={styles.scene} style={pic(garden)} aria-hidden>
+      <div className={`${styles.scene} ${visible ? '' : styles.layerOff}`} style={pic(garden)} data-cxv aria-hidden>
         <div ref={gardenParRef} className={styles.par}>
           <div className={styles.breathe}>
             <div className={styles.cam}>
