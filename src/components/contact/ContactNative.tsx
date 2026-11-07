@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from 'react';
 import gsap from 'gsap';
 import { useReveal } from '../reveal/NextReveal';
 import { smooth, scrollToTarget } from '../reveal/smooth';
@@ -17,11 +17,11 @@ import styles from './contactNative.module.css';
    tiny canvas. That is why it looks like the real scene and costs almost nothing: no GPU scene, no workers, nothing to boot,
    nothing that can fail, the same on every phone and laptop.
 
-   TWO WAYS IN (both end in the same place, and both play exactly ONE ring):
+   TWO WAYS IN:
    · SCROLL  : Work lifts away, the lake window, the ring fills (revealEngine), the window opens, then the camera moves on to the
                tree and chairs while the black panel slides in from the right.
-   · BUTTON  : "Let's talk" / dock Contact: the project's RING transition covers the screen, the page jumps to Contact while it is
-               covered, the ring opens onto the lake, then the same camera move plays. (If another ring is already covering the
+   · BUTTON  : "Let's talk" / dock Contact: NO scene animation. The intro's RING closes over the screen (fast), the page jumps to the
+               finished Contact page while it is covered, and the ring opens straight onto it. (If another ring is already covering the
                screen, e.g. the Stack overlay's, Contact does not start a second one.) */
 
 const EMAIL = 'bshubhrato@gmail.com';
@@ -30,8 +30,12 @@ const SERVICES = ['AI & agentic RAG systems', 'backend APIs & data', 'full-stack
 const LAKE_URL = '/contact-scene/lake-poster.jpg';
 const GARDEN_URL = '/contact-scene/garden-poster.jpg';
 
-/* how long the camera takes from the lake to the garden (seconds) */
-const PAN_SECONDS = 2.7;
+/* how long the camera takes from the lake to the garden when you SCROLL in (seconds). A Contact button does not use it: that path lands on the finished page */
+const PAN_SECONDS = 1.7;
+const DIRECT_RING = { close: 0.55, open: 0.95 }; // seconds, the Contact button's ring (the Stack / Work rings keep their own, longer, defaults)
+
+// useLayoutEffect warns during server rendering; fall back to useEffect there
+const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 const MOBILE_QUERY = '(max-width: 900px)';
 
 const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2); // gentle start, no long wait before it moves
@@ -77,6 +81,7 @@ export default function ContactNative() {
   const engaged = open || opening;
   const mobile = useSyncExternalStore(subscribeMobile, getMobile, () => false);
 
+  const [landed, setLanded] = useState(false); // the pictures may be shown (a Contact button waits until the ring has covered the screen)
   const [seenRaw, setSeen] = useState(false);
   const [panelIn, setPanelIn] = useState(false); // the panel has arrived: its rows rise in one after another
   const seen = open && seenRaw;
@@ -95,13 +100,41 @@ export default function ContactNative() {
     return () => io.disconnect();
   }, []);
 
+  /* The camera numbers are written ONLY on the elements that read them: the two picture layers (--cam / --rush / --land / --pull) and
+     the panel (--pp). Written on the section itself they were inherited by the whole form, so every frame of the move re-styled every row. */
+  const layersRef = useRef<HTMLElement[]>([]); // [lake, garden]
+  const vals = useRef({ pp: '0', cam: '0', rush: '0', land: '0', pull: '0' });
+  const writeVars = useCallback(() => {
+    const v = vals.current;
+    const [lake, garden] = layersRef.current;
+    if (lake) {
+      lake.style.setProperty('--cam', v.cam);
+      lake.style.setProperty('--rush', v.rush);
+      lake.style.setProperty('--pull', v.pull);
+    }
+    if (garden) {
+      garden.style.setProperty('--cam', v.cam);
+      garden.style.setProperty('--land', v.land);
+    }
+    panelRef.current?.style.setProperty('--pp', v.pp);
+  }, []);
+  useIsoLayoutEffect(() => {
+    layersRef.current = Array.from(rootRef.current?.querySelectorAll<HTMLElement>('[data-cxv]') ?? []);
+    writeVars();
+  }, [writeVars]);
+  /* the panel is created when the page opens, possibly in the middle of the move: give it the current value before it is painted */
+  useIsoLayoutEffect(() => {
+    panelRef.current?.style.setProperty('--pp', vals.current.pp);
+  }, [open]);
+
   /* THE PULL: while the visitor pulls (the ring filling) the camera already creeps forward over the lake, in step with the ring; if
      they let go the ring drains and the camera drifts back. When the ring is full the flight below continues from exactly there. */
   useEffect(
     () =>
       subscribeProgress((p) => {
         if (playedRef.current) return;
-        rootRef.current?.style.setProperty('--pull', (1 - Math.pow(1 - p, 2)).toFixed(4));
+        vals.current.pull = (1 - Math.pow(1 - p, 2)).toFixed(4);
+        layersRef.current[0]?.style.setProperty('--pull', vals.current.pull);
       }),
     [subscribeProgress],
   );
@@ -111,13 +144,14 @@ export default function ContactNative() {
     const pe = ease(p);
     const pp = smoothstep(0.22, 0.8, pe);
     ppRef.current = pe;
-    const el = rootRef.current;
-    el?.style.setProperty('--pp', pp.toFixed(4)); // the panel
-    el?.style.setProperty('--cam', pe.toFixed(4)); // the pictures: overall progress
-    el?.style.setProperty('--rush', Math.pow(pe, 1.8).toFixed(4)); // the lake: the camera speeds up over the water
-    el?.style.setProperty('--land', (1 - Math.pow(1 - pe, 2.4)).toFixed(4)); // the garden: arrives fast, settles slowly
+    const v = vals.current;
+    v.pp = pp.toFixed(4); // the panel
+    v.cam = pe.toFixed(4); // the pictures: overall progress
+    v.rush = Math.pow(pe, 1.8).toFixed(4); // the lake: the camera speeds up over the water
+    v.land = (1 - Math.pow(1 - pe, 2.4)).toFixed(4); // the garden: arrives fast, settles slowly
+    writeVars();
     if (pe > 0.5) setPanelIn(true);
-  }, []);
+  }, [writeVars]);
 
   const playPan = useCallback(
     (delay = 0) => {
@@ -140,31 +174,33 @@ export default function ContactNative() {
   useEffect(() => {
     if (direct || !engaged || playedRef.current) return;
     playedRef.current = true;
-    rootRef.current?.style.setProperty('--pull', '1');
+    vals.current.pull = '1';
+    layersRef.current[0]?.style.setProperty('--pull', '1');
+    setLanded(true);
     playPan(0); // the flight carries on from the pull without a pause
   }, [direct, engaged, playPan]);
 
-  /* BUTTON path: ONE ring. The project's ring covers the screen, the page jumps to Contact unseen, the ring opens onto the lake.
+  /* BUTTON path: no scene animation at all. ONE ring (the intro's, run fast): it covers the screen, the page jumps to the FINISHED
+     Contact page while covered, and the ring opens straight onto it (the rows rise in as it opens).
      If a ring is already on screen (the Stack overlay plays one before it sends us here) we ride on that one. */
   useEffect(() => {
     if (!direct || !open || directRun === lastRun.current) return;
     lastRun.current = directRun;
     playedRef.current = true;
     tweenRef.current?.kill();
-    const jump = () => {
+    const land = () => {
+      tweenRef.current?.kill();
       jumpToNext();
-      setPanelIn(false);
-      setProgress(0);
+      setProgress(1); // camera at the garden, panel in place
+      setPanelIn(true);
+      setLanded(true);
     };
     if (isRingRunning()) {
-      void Promise.resolve().then(() => {
-        jump();
-        playPan(0.2);
-      });
+      void Promise.resolve().then(land);
       return;
     }
-    void runRingTransition(jump).finally(() => playPan(0.2));
-  }, [direct, open, directRun, jumpToNext, playPan, setProgress]);
+    void runRingTransition(land, { close: DIRECT_RING.close, open: DIRECT_RING.open });
+  }, [direct, open, directRun, jumpToNext, setProgress]);
 
   useEffect(
     () => () => {
@@ -179,10 +215,11 @@ export default function ContactNative() {
     playedRef.current = false;
     tweenRef.current?.kill();
     ppRef.current = 0;
-    rootRef.current?.style.setProperty('--pp', '0');
-    ['--cam', '--rush', '--land', '--pull'].forEach((v) => rootRef.current?.style.setProperty(v, '0'));
+    vals.current = { pp: '0', cam: '0', rush: '0', land: '0', pull: '0' };
+    writeVars();
     setPanelIn(false);
-  }, [engaged]);
+    setLanded(false);
+  }, [engaged, writeVars]);
 
   /* the panel's height changes as fonts and rows settle: keep the smooth scroller's idea of the page length right */
   useEffect(() => {
@@ -192,7 +229,9 @@ export default function ContactNative() {
     return () => ro.disconnect();
   }, [open]);
 
-  const show = engaged || lakeVisible;
+  /* the pictures exist on screen only when Contact is about to be needed (end of Work, opening, open); a Contact button waits for the ring */
+  const layersOn = lakeNear || (engaged && (!direct || landed));
+  const show = layersOn && (engaged || lakeVisible);
   const backdropOn = (open ? seen : opening || lakeNear) && show;
 
   /* ---------- the form ---------- */
@@ -263,9 +302,8 @@ export default function ContactNative() {
       className={`${styles.contact} ${open ? styles.open : ''} ${panelIn ? styles.in : ''}`}
       aria-label="Contact"
       data-wk-smoke
-      style={{ ['--pp' as string]: 0, ['--cam' as string]: 0, ['--rush' as string]: 0, ['--land' as string]: 0, ['--pull' as string]: 0 }}
     >
-      <ContactBackdrop ppRef={ppRef} active={backdropOn} mobile={mobile} lake={LAKE_URL} garden={GARDEN_URL} />
+      <ContactBackdrop ppRef={ppRef} active={backdropOn} mobile={mobile} lake={LAKE_URL} garden={GARDEN_URL} visible={layersOn} />
       <div className={`${styles.shade} ${show ? styles.stageOn : ''}`} aria-hidden />
 
       {open && (
