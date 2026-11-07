@@ -41,6 +41,15 @@
   pointer-events: none;
   background: #120a26;
 }
+/* hidden until Contact is about to be needed (end of Work / opening): the lake used to sit behind EVERY page, so it flashed through
+   the Stack's window for a frame before the Stack scene was drawn */
+.layerOff,
+:global(html[data-pull-stack]) .lakeLayer,
+:global(html[data-pull-stack]) .scene,
+:global(html[data-sr-open]) .lakeLayer,
+:global(html[data-sr-open]) .scene {
+  visibility: hidden;
+}
 /* the lake: fixed behind Work (the window under it) */
 .lakeLayer {
   inset: 0;
