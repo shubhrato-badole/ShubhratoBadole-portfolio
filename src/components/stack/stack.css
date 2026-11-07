@@ -47,8 +47,8 @@ html.is-paginating, html.is-paginating * { cursor: grabbing !important; }
   pointer-events: none;
   visibility: hidden;
 }
-.sr-bgfill { position: fixed; inset: 0; z-index: -1; background: #04010f; visibility: hidden; pointer-events: none; }
-html[data-pull-stack] .sr-bgfill { visibility: visible; }
+/* phones: for a moment (see momentumLock in StackGate.tsx) the page may not scroll at all, which stops a fling dead at the end of About */
+html[data-sg-lock] { overflow: hidden !important; }
 .sr-input { position: absolute; inset: 0; z-index: 1; touch-action: none; cursor: grab; pointer-events: auto; }
 .sr-input:active { cursor: grabbing; }
 
