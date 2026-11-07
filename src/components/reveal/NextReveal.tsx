@@ -146,6 +146,8 @@ export default function NextReveal({ children, next, title = 'Contact' }: Props)
       else if (arrived && top > window.innerHeight * 1.02) {
         directRef.current = false;
         setDirect(false);
+        setLakeNear(false); // the fresh engine only reports CHANGES, so a stale "true" would keep the lake layer on screen
+        setLakeVisible(false);
         setPhase('reveal');
         setEngineKey((k) => k + 1);
       }
