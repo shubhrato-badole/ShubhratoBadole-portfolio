@@ -94,7 +94,7 @@ export class RingScene {
 
   async init(quality: 'high' | 'low') {
     const cw = quality === 'high' ? 432 : 288, ch = quality === 'high' ? 576 : 384;
-    const [atlas] = await Promise.all([buildAtlas(cw, ch), document.fonts.load('500 24px "IBM Plex Mono"')]);
+    const [atlas] = await Promise.all([buildAtlas(cw, ch), Promise.race([document.fonts.load('500 24px "IBM Plex Mono"'), new Promise((r) => setTimeout(r, 2500))]).catch(() => {})]); // the font may not hold the start-up up for more than 2.5 s
     const code = buildCodeTexture();
     this.buildSlabs(atlas, code);
     this.buildCeiling(); this.buildRail(); this.buildParticles();
